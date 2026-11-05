@@ -8,11 +8,11 @@ Verified locally on macOS with Node 22:
 - Routing/reserve checks, quota fallback, explicit preference pinning, process timeout/output bounds, cancellation, missing-runner recovery and idle monitoring without agent calls.
 - Clean tarball installation, installed CLI version/help smoke checks, package-content inspection and SHA-256 generation.
 - A bounded **live Codex subscription** worker created one file in an isolated fixture checkout; its exact contents were independently verified.
+- A bounded **live Claude subscription** worker also created the fixture file; its exact contents were independently verified.
 - Live Codex account reads returned separate five-hour and weekly allowance measurements.
 
 Not verified live:
 
-- Claude execution: the installed CLI reported no authenticated account during setup. Its adapter and channel are covered by mock integration tests; a real Claude session is still required.
 - End-to-end delivery into an actual interactive Codex/Claude chat. Mock transport/Snooze tests cover the contracts, but queue acceptance is not proof of model receipt.
 - GitHub-hosted CI, Linux runtime and Node 24: configured in the CI matrix, not represented as executed locally.
 
