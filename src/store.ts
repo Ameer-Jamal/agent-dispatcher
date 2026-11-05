@@ -2,7 +2,12 @@ import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { chmodSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { privateDir, type Agent, type TaskInput } from "./config.js";
+import {
+  privateDir,
+  taskSchema,
+  type Agent,
+  type TaskInput,
+} from "./config.js";
 export type Status =
   | "queued"
   | "running"
@@ -54,6 +59,7 @@ export interface Usage {
   lastTaskTokens?: number;
   windows?: {
     id: string;
+    group?: string;
     kind: string;
     windowMinutes?: number | null;
     remainingPercent: number;
@@ -80,6 +86,7 @@ export class Store {
         .get(input.idempotencyKey) as { data: string } | undefined;
       if (old) {
         const task = JSON.parse(old.data) as Task;
+        task.input = taskSchema.parse(task.input);
         if (JSON.stringify(task.input) !== JSON.stringify(input))
           throw new Error(
             "Idempotency key already belongs to a different task",

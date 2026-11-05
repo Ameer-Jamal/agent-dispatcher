@@ -4,7 +4,7 @@ A stdio MCP process is a lightweight client of the local SQLite store. A separat
 
 Task states are `queued → running → completed|failed|blocked|cancelled|interrupted`. SQLite stores input, routing, attempts, worker session IDs, process identities and artifact paths. Idempotency keys are unique across the state directory; reusing a key with a different input is an error.
 
-The runner verifies subscription authentication, obtains cached/fresh Codex allowance, chooses a worker, snapshots the source checkout with a temporary Git index, and creates a detached worktree. Git hooks and fsmonitor are disabled for dispatcher Git operations. Worker tools use native sandbox/permission settings. Worker MCP configuration is empty and the worker environment rejects recursive dispatcher calls. This is an accidental-recursion guard, not an adversarial security boundary.
+The runner verifies subscription authentication, obtains cached/fresh Codex allowance, chooses a worker, snapshots the source checkout with a temporary Git index, and creates a detached worktree. Git hooks and fsmonitor are disabled for dispatcher Git operations. Worker tools use native sandbox/permission settings. Codex/Claude worker MCP configuration is empty. Additional workers use macOS configuration isolation to hide global/project extension files; OpenCode also uses policies that deny MCP, plugins, subagents and non-Go providers. The worker environment rejects recursive dispatcher calls. This is an accidental-recursion guard, not an adversarial security boundary.
 
 Each attempt produces bounded stdout/stderr evidence. A second attempt is allowed only after a known quota or availability failure, uses another eligible agent, and continues in the same isolated worktree. Unknown outcomes are never automatically repeated. Snapshot-relative binary patches include worker-created files while excluding pre-existing input edits. The dispatcher does not run arbitrary acceptance-check strings as host shell commands; they are requirements for the worker and coordinator.
 
@@ -27,3 +27,9 @@ The reserve is best effort; account state can change between checks, and a singl
 ## Retention
 
 Artifacts and worktrees are retained for review and recovery. Before deleting an old task directory, remove its worktree using `git worktree remove /absolute/task/worktree` from the source repository. Never delete active task directories. SQLite and artifact directories are owner-only but not encrypted. There is no remote HTTP API or dashboard.
+
+## Additional CLI isolation
+
+Cursor uses a permissions-only project overlay inside the isolated checkout. The original overlay is restored before patch capture, and symlinked configuration paths are refused. Its native sandbox is enabled explicitly; global account authentication is retained. Antigravity runs with its native sandbox and scoped settings, `useG1Credits: false`, and extension configuration hidden. OpenCode V2 runs a private standalone server with an isolated config directory, a Go-only provider policy, native permission rules and an OS write boundary allowing task/runtime state. Its `read`/`edit` resources are location-relative, with external-directory access denied separately.
+
+All spawned tools receive `PWD` matching their actual working directory. This prevents CLIs that consult `PWD` from targeting the coordinator checkout. Antigravity `/usage` probes require structured results showing zero turns and zero tokens, retain all groups, and select the configured model group for routing headroom. Native account/model probes are cached for one minute. New workers require macOS configuration isolation; existing Codex/Claude behavior is preserved elsewhere.

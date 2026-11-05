@@ -1,5 +1,10 @@
 # Troubleshooting
 
+- **Cursor cached login but no models:** `agent status` alone is insufficient. Run `agent login`, then `agent models`. Enable Cursor only after models are accessible. Account tier and remaining allowance are unknown when the CLI does not report them.
+- **OpenCode Go unavailable:** verify `opencode auth list` includes Go and `opencode models` includes the configured `opencode-go/...` model. Other provider prefixes are rejected even for explicit overrides. Version 2.2.3+ is required for worker policy controls. Do not replace scoped permissions with `--auto`.
+- **Antigravity unavailable:** run `agy -p /usage --output-format json` to check account quota without inference. API-key, ADC and gateway billing environment routes are removed for workers, and extra AI credits are disabled.
+- **Additional worker disabled:** run `agent-dispatcher enable AGENT`, then `doctor`. Disabled status is distinct from authentication failure. These adapters require macOS sandbox-exec for configuration isolation.
+
 - **Claude unavailable:** run `claude auth status --json`. Sign in with `claude auth login`; the accepted method is `claude.ai`. A paid web subscription does not establish that this CLI is signed in. The dispatcher does not initiate browser login or alter subscription settings.
 - **Codex unavailable/unknown usage:** run `codex login status`, then `agent-dispatcher doctor`. Account reads are throttled to once per minute. A transient failure blocks automatic Codex selection conservatively; wait one minute and retry doctor. It does not consume a model turn.
 - **No eligible worker:** inspect `status` and `doctor`. Check subscription login, allowance freshness, reserve and quota cooldown. An explicit `prefer` bypasses reserve only, not missing authentication or cooldown.

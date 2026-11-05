@@ -224,3 +224,21 @@ export async function launchClaude(
     child.on("close", (code) => resolve(code ?? 1));
   });
 }
+
+export function setAgentEnabled(
+  state: string,
+  agent: keyof Config["agents"],
+  enabled: boolean,
+) {
+  initialize(state);
+  const config = loadConfig(state);
+  config.agents[agent].enabled = enabled;
+  const path = join(state, "config.json");
+  backup(path);
+  writeFileSync(path, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+  return {
+    agent,
+    enabled,
+    note: "Authentication, native configuration isolation and quota checks still apply before launch",
+  };
+}

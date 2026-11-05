@@ -3,13 +3,23 @@ export function subscriptionEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env, AGENT_DISPATCHER_WORKER: "1" };
   for (const key of Object.keys(env)) {
     if (
-      /^(OPENAI_API_KEY|OPENAI_BASE_URL|CODEX_API_KEY|CODEX_ACCESS_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|ANTHROPIC_BASE_URL|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_|AWS_|AZURE_|GOOGLE_APPLICATION_CREDENTIALS)/.test(
+      /^(OPENAI_API_KEY|OPENAI_BASE_URL|CODEX_API_KEY|CODEX_ACCESS_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|ANTHROPIC_BASE_URL|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_|AWS_|AZURE_|GOOGLE_APPLICATION_CREDENTIALS|GOOGLE_API_KEY|GEMINI_API_KEY|GEMINI_BASE_URL|CURSOR_API_KEY|CURSOR_AUTH_TOKEN|AGY_ADC_AUTH|AGY_LLM_GATEWAY_)/.test(
         key,
       )
     )
       delete (env as NodeJS.ProcessEnv)[key];
   }
   delete (env as NodeJS.ProcessEnv).CLAUDECODE;
+  for (const key of [
+    "OPENCODE_CONFIG",
+    "OPENCODE_CONFIG_CONTENT",
+    "OPENCODE_CONFIG_DIR",
+    "OPENCODE_SERVER_PASSWORD",
+    "OPENCODE_API_KEY",
+    "CURSOR_CONFIG_DIR",
+    "ANTIGRAVITY_GEMINI_DIR",
+  ])
+    delete (env as NodeJS.ProcessEnv)[key];
   return env;
 }
 export interface RunResult {
@@ -39,7 +49,10 @@ export function run(
       settled = false;
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: options.env ?? process.env,
+      env: {
+        ...(options.env ?? process.env),
+        ...(options.cwd ? { PWD: options.cwd } : {}),
+      },
       stdio: ["pipe", "pipe", "pipe"],
       detached: true,
     });

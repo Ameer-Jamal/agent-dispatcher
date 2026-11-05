@@ -39,13 +39,13 @@ Configuration:
 }
 ```
 
-`files` and `acceptanceChecks` default to empty arrays. `prefer` accepts `codex` or `claude` and represents an explicit override. `model` requires `prefer`. `capabilityReason` explains an automatic Codex capability advantage; it does not bypass reserve checks. Omit `origin` only for inbox-only tasks. The Claude launcher supplies its bound origin automatically and rejects mismatches. Codex callers supply the exact originating chat UUID.
+`files` and `acceptanceChecks` default to empty arrays. `taskType` accepts `implementation` (default), `investigation`, `review` or `maintenance`. `prefer` accepts `codex`, `claude`, `cursor`, `antigravity` or `opencode` and represents an explicit override. `model` requires `prefer`. `capabilityReason` explains an automatic Codex capability advantage; it does not bypass reserve checks. Omit `origin` only for inbox-only tasks. The Claude launcher supplies its bound origin automatically and rejects mismatches. Codex callers supply the exact originating chat UUID.
 
 `get_task` accepts `taskId`, optional `acknowledge` and `origin`. Receipt acknowledgement requires the matching origin, supplied automatically for a bound Claude channel. It returns compact state, routing reason, summary, session and artifact paths. Read artifacts only as needed. `list_tasks` accepts `limit` (1–100, default 20). `cancel_task` accepts `taskId`. `usage_status` reads cached usage and service health without inference or polling an agent.
 
 ## CLI
 
-`dispatch FILE.json` uses the same task schema. `get`, `status`, `cancel`, `apply`, `doctor`, `register`, `unregister`, `worker`, `serve`, `claude` and `service` are described by `--help`.
+`dispatch FILE.json` uses the same task schema. `get`, `status`, `cancel`, `apply`, `doctor`, `enable`, `disable`, `register`, `unregister`, `worker`, `serve`, `claude` and `service` are described by `--help`.
 
 `usage-set FILE.json` stores an **estimated**, never measured, observation:
 

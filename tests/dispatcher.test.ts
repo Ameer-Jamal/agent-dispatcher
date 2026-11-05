@@ -219,3 +219,18 @@ test("explicit preference never falls back after a quota error", async () => {
     f.cleanup();
   }
 });
+
+test("pre-taskType idempotency records survive a configuration upgrade", () => {
+  const f = fixture();
+  try {
+    const task = submit(f.store, f.config, f.input);
+    const old = JSON.parse(JSON.stringify(task));
+    delete old.input.taskType;
+    f.store.db
+      .prepare("UPDATE tasks SET data=? WHERE id=?")
+      .run(JSON.stringify(old), task.id);
+    assert.equal(submit(f.store, f.config, f.input).id, task.id);
+  } finally {
+    f.cleanup();
+  }
+});

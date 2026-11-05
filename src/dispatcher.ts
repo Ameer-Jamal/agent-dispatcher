@@ -167,7 +167,9 @@ export async function runTask(store: Store, config: Config, id: string) {
     let selection = route(
       task.input,
       config,
-      { codex: store.usage("codex"), claude: store.usage("claude") },
+      Object.fromEntries(
+        Object.keys(config.agents).map((a) => [a, store.usage(a as Agent)]),
+      ),
       available,
     );
     if (abort.signal.aborted || store.get(id).status === "cancelled") return;
@@ -190,6 +192,7 @@ export async function runTask(store: Store, config: Config, id: string) {
         abort.signal,
         (pid) =>
           store.update(id, { workerPid: pid, workerIdentity: identity(pid) }),
+        tree.artifactDir,
       );
       writeFileSync(
         join(tree.artifactDir, `attempt-${attempt}.json`),
@@ -234,7 +237,12 @@ export async function runTask(store: Store, config: Config, id: string) {
           selection = route(
             task.input,
             config,
-            { codex: store.usage("codex"), claude: store.usage("claude") },
+            Object.fromEntries(
+              Object.keys(config.agents).map((a) => [
+                a,
+                store.usage(a as Agent),
+              ]),
+            ),
             await availability(config, store),
             used,
           );

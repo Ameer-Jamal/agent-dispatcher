@@ -4,13 +4,19 @@ export function route(
   input: TaskInput,
   config: Config,
   usage: Partial<Record<Agent, Usage>>,
-  available: Record<Agent, boolean>,
+  available: Partial<Record<Agent, boolean>>,
   excluded: Agent[] = [],
 ): { agent: Agent; reason: string } {
   const now = Date.now();
+  const taskType = input.taskType ?? "implementation";
   const eligible = (agent: Agent) =>
+    config.agents[agent].enabled &&
     available[agent] &&
     !excluded.includes(agent) &&
+    !(
+      usage[agent]?.quality === "measured" &&
+      usage[agent]?.remainingPercent === 0
+    ) &&
     !(usage[agent]?.blockedUntil && usage[agent]!.blockedUntil! > now);
   const codexSafe = () => {
     const u = usage.codex;
@@ -36,17 +42,14 @@ export function route(
       agent: "codex",
       reason: `Capability advantage: ${input.capabilityReason}`,
     };
-  if (eligible("claude"))
+  for (const agent of config.routing[taskType]) {
+    if (agent === "codex" && !codexSafe()) continue;
+    if (!eligible(agent)) continue;
     return {
-      agent: "claude",
-      reason:
-        "Claude execution preference preserves Codex conversation allowance",
+      agent,
+      reason: `${taskType} preference: ${agent}; Codex conversation reserve protected`,
     };
-  if (eligible("codex") && codexSafe())
-    return {
-      agent: "codex",
-      reason: "Claude unavailable; measured Codex allowance exceeds reserve",
-    };
+  }
   throw new Error(
     "No eligible subscription worker: Codex reserve/unknown allowance or worker authentication prevents dispatch",
   );

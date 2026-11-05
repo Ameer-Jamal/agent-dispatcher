@@ -32,6 +32,8 @@ if(args[0]==='app-server'){
  let buffer='';process.stdin.on('data',chunk=>{buffer+=chunk;let end;while((end=buffer.indexOf('\\n'))>=0){const msg=JSON.parse(buffer.slice(0,end));buffer=buffer.slice(end+1);if(!msg.id)continue;
  const result=msg.method==='account/read'?{account:{type:'chatgpt'}}:msg.method==='account/rateLimits/read'?{rateLimits:{primary:{usedPercent:20,resetsAt:Math.floor(Date.now()/1000)+3600},secondary:{usedPercent:25,resetsAt:Math.floor(Date.now()/1000)+7200}}}:{};
  console.log(JSON.stringify({id:msg.id,result}));}});
+}else if(args[0]==='status'){console.log('Logged in');
+}else if(args[0]==='models'){console.log('No models available for this account.');
 }else if(args[0]==='login'){console.error('Logged in using ChatGPT');
 }else if(args[0]==='auth'){console.log(JSON.stringify({loggedIn:mode!=='unauthenticated',authMethod:mode==='unauthenticated'?'none':'claude.ai'}));
 }else if(args[0]==='add'){fs.writeFileSync(${JSON.stringify(join(root, "schedule.json"))},args.at(-1));console.log(JSON.stringify({id:'snooze-fixture'}));

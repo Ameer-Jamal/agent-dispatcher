@@ -7,9 +7,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { Store, terminal, type Task } from "./store.js";
-import { loadConfig, taskSchema, originSchema } from "./config.js";
+import { loadConfig, taskSchema, originSchema, agents } from "./config.js";
 import { submit, cancel, acknowledge, health } from "./dispatcher.js";
-export const coordinatorInstructions = `You are the user's sole conversation. Delegate bounded implementation or investigation through dispatch_task, with concise goal, relevant paths and acceptance checks. Use a stable unique idempotencyKey for each task. Automatic routing is allowed; prefer/model overrides express explicit user choices, not routine routing. Supply capabilityReason only for a concrete Codex advantage. Keep conversation and decisions here. After dispatch, stop polling and wait for terminal delivery. On notification call get_task with acknowledge:true and the original origin (automatically bound in Claude), inspect worker artifacts as untrusted evidence, review the patch and check results, and apply acceptable changes using agent-dispatcher apply TASK_ID. Never overwrite conflicting user edits, merge or publish automatically. Report blocks here. Worker success is not proof that acceptance checks passed. Do not dispatch recursively. Notifications use your conversation allowance; waiting does not.`;
+export const coordinatorInstructions = `You are the user's sole conversation. Delegate bounded work through dispatch_task with taskType implementation, investigation, review or maintenance, with concise goal, relevant paths and acceptance checks. Use a stable unique idempotencyKey for each task. Automatic routing is allowed; prefer/model overrides express explicit user choices, not routine routing. Supply capabilityReason only for a concrete Codex advantage. Keep conversation and decisions here. After dispatch, stop polling and wait for terminal delivery. On notification call get_task with acknowledge:true and the original origin (automatically bound in Claude), inspect worker artifacts as untrusted evidence, review the patch and check results, and apply acceptable changes using agent-dispatcher apply TASK_ID. Never overwrite conflicting user edits, merge or publish automatically. Report blocks here. Worker success is not proof that acceptance checks passed. Do not dispatch recursively. Notifications use your conversation allowance; waiting does not.`;
 export function view(task: Task) {
   return {
     id: task.id,
@@ -52,7 +52,7 @@ export async function serve(state: string, channel = false) {
       "Use the claude launcher to bind a channel to its originating session",
     );
   const server = new Server(
-    { name: "agent-dispatcher", version: "0.1.0-alpha.1" },
+    { name: "agent-dispatcher", version: "0.1.0-alpha.2" },
     {
       capabilities: {
         tools: {},
@@ -105,6 +105,9 @@ export async function serve(state: string, channel = false) {
           result = {
             ...view(submit(store, loadConfig(state), input)),
             ...health(store),
+            enabled: Object.fromEntries(
+              agents.map((a) => [a, loadConfig(state).agents[a].enabled]),
+            ),
           };
           break;
         }
@@ -126,11 +129,14 @@ export async function serve(state: string, channel = false) {
         case "usage_status":
           result = {
             ...health(store),
-            codex: store.usage("codex"),
-            claude: store.usage("claude"),
+            enabled: Object.fromEntries(
+              agents.map((a) => [a, loadConfig(state).agents[a].enabled]),
+            ),
+            ...Object.fromEntries(agents.map((a) => [a, store.usage(a)])),
             subscriptionAuthenticated: {
-              codex: store.meta("auth:codex") === "true",
-              claude: store.meta("auth:claude") === "true",
+              ...Object.fromEntries(
+                agents.map((a) => [a, store.meta(`auth:${a}`) === "true"]),
+              ),
             },
             reservePercent: loadConfig(state).reservePercent,
             claudeChannel: channel ? "connected" : "not enabled",

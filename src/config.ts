@@ -9,8 +9,35 @@ import {
 } from "node:fs";
 import { z } from "zod";
 
-export const Agent = z.enum(["codex", "claude"]);
+export const Agent = z.enum([
+  "codex",
+  "claude",
+  "cursor",
+  "antigravity",
+  "opencode",
+]);
 export type Agent = z.infer<typeof Agent>;
+export const agents = Agent.options;
+export const TaskType = z.enum([
+  "implementation",
+  "investigation",
+  "review",
+  "maintenance",
+]);
+const workerConfig = (
+  command: string,
+  pool: string,
+  enabled: boolean,
+  model?: string,
+) =>
+  z
+    .object({
+      command: z.string().default(command),
+      model: model ? z.string().default(model) : z.string().optional(),
+      pool: z.string().default(pool),
+      enabled: z.boolean().default(enabled),
+    })
+    .prefault({});
 export const configSchema = z.object({
   reservePercent: z.number().min(0).max(100).default(30),
   usageMaxAgeSeconds: z.number().int().min(60).default(180),
@@ -19,20 +46,41 @@ export const configSchema = z.object({
   allowedRoots: z.array(z.string()).default([]),
   agents: z
     .object({
-      codex: z
-        .object({
-          command: z.string().default("codex"),
-          model: z.string().optional(),
-          pool: z.string().default("chatgpt-primary"),
-        })
-        .prefault({}),
-      claude: z
-        .object({
-          command: z.string().default("claude"),
-          model: z.string().optional(),
-          pool: z.string().default("claude-primary"),
-        })
-        .prefault({}),
+      codex: workerConfig("codex", "chatgpt-primary", true),
+      claude: workerConfig("claude", "claude-primary", true),
+      cursor: workerConfig("agent", "cursor-primary", false, "auto"),
+      antigravity: workerConfig(
+        "agy",
+        "antigravity-primary",
+        false,
+        "Gemini 3.8 Flash (High)",
+      ),
+      opencode: workerConfig(
+        "opencode",
+        "opencode-go-primary",
+        false,
+        "opencode-go/minimax-m3",
+      ),
+    })
+    .prefault({}),
+  routing: z
+    .object({
+      implementation: z
+        .array(Agent)
+        .min(1)
+        .default(["claude", "cursor", "antigravity", "opencode", "codex"]),
+      investigation: z
+        .array(Agent)
+        .min(1)
+        .default(["claude", "antigravity", "cursor", "opencode", "codex"]),
+      review: z
+        .array(Agent)
+        .min(1)
+        .default(["antigravity", "claude", "cursor", "opencode", "codex"]),
+      maintenance: z
+        .array(Agent)
+        .min(1)
+        .default(["opencode", "claude", "antigravity", "cursor", "codex"]),
     })
     .prefault({}),
   snooze: z
@@ -73,7 +121,7 @@ export function initialize(state = stateDir()) {
   return path;
 }
 export const originSchema = z.object({
-  client: Agent,
+  client: z.enum(["codex", "claude"]),
   sessionId: z.string().uuid(),
 });
 export const taskSchema = z
@@ -82,6 +130,7 @@ export const taskSchema = z
     cwd: z.string().min(1),
     files: z.array(z.string().min(1)).max(100).default([]),
     acceptanceChecks: z.array(z.string().min(1)).max(30).default([]),
+    taskType: TaskType.default("implementation"),
     prefer: Agent.optional(),
     model: z.string().min(1).max(200).optional(),
     capabilityReason: z.string().min(1).max(1000).optional(),

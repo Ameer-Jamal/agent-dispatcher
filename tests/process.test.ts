@@ -28,3 +28,17 @@ test("process identity prevents signalling a reused or unrelated PID", () => {
   assert.equal(sameProcess(process.pid, birth), true);
   assert.equal(sameProcess(process.pid, "different birth"), false);
 });
+
+test("spawned tools receive PWD matching the actual isolated working directory", async () => {
+  const result = await run(
+    process.execPath,
+    [
+      "-e",
+      "console.log(JSON.stringify({cwd:process.cwd(),pwd:process.env.PWD}))",
+    ],
+    { cwd: "/tmp" },
+  );
+  const data = JSON.parse(result.stdout);
+  assert.equal(data.pwd, "/tmp");
+  assert.match(data.cwd, /\/tmp$/);
+});

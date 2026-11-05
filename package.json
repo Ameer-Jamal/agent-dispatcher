@@ -1,6 +1,6 @@
 {
   "name": "@ameer-jamal/agent-dispatcher",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Local subscription-aware MCP task dispatch with Codex allowance protection",
   "type": "module",
   "license": "MIT",

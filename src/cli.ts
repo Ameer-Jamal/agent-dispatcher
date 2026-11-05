@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { stateDir, initialize, loadConfig } from "./config.js";
+import { stateDir, initialize, loadConfig, Agent, agents } from "./config.js";
 import { Store } from "./store.js";
 import { serve, view } from "./mcp.js";
 import { worker, runTask, submit, cancel, health } from "./dispatcher.js";
@@ -10,12 +10,13 @@ import { availability, refreshUsage } from "./usage.js";
 import { applyPatch } from "./worktree.js";
 import {
   setup,
+  setAgentEnabled,
   registerClients,
   unregisterClients,
   service,
   launchClaude,
 } from "./setup.js";
-const help = `agent-dispatcher 0.1.0-alpha.1\nUsage: agent-dispatcher [--state ABS_PATH] COMMAND\n\nsetup [--root ABS_PATH]  Initialize private config; detect Snooze; preserve defaults\nregister                 Register MCP in Codex/Claude, preserving existing entries\nunregister               Remove matching MCP entries; retain state\ndoctor                   Check subscription authentication and allowance (no inference)\nserve [--channel]        Serve stdio MCP; channels require the Claude launcher\nworker [--once]          Run the durable single-worker scheduler\nservice install|start|stop|uninstall\nclaude [--resume UUID]   Launch Claude Code with completion delivery enabled\ndispatch TASK.json       Queue a task (cwd must be an allowed Git root)\nstatus                   Show health, cached usage and recent task summaries\nget TASK_ID              Read saved task including input and artifacts\ncancel TASK_ID           Stop a task and retain partial work\napply TASK_ID            Apply a completed patch AFTER coordinator review\nusage-set AGENT.json     Save a manual estimated allowance/cooldown\n--help | --version\n`;
+const help = `agent-dispatcher 0.1.0-alpha.2\nUsage: agent-dispatcher [--state ABS_PATH] COMMAND\n\nsetup [--root ABS_PATH]  Initialize private config; detect Snooze; preserve defaults\nregister                 Register MCP in Codex/Claude, preserving existing entries\nunregister               Remove matching MCP entries; retain state\nenable|disable AGENT     Control worker eligibility; preserve other settings\ndoctor                   Check subscription authentication and allowance (no inference)\nserve [--channel]        Serve stdio MCP; channels require the Claude launcher\nworker [--once]          Run the durable single-worker scheduler\nservice install|start|stop|uninstall\nclaude [--resume UUID]   Launch Claude Code with completion delivery enabled\ndispatch TASK.json       Queue a task (cwd must be an allowed Git root)\nstatus                   Show health, cached usage and recent task summaries\nget TASK_ID              Read saved task including input and artifacts\ncancel TASK_ID           Stop a task and retain partial work\napply TASK_ID            Apply a completed patch AFTER coordinator review\nusage-set AGENT.json     Save a manual estimated allowance/cooldown\n--help | --version\n`;
 async function main() {
   const raw = process.argv.slice(2);
   const stateIndex = raw.indexOf("--state");
@@ -31,7 +32,7 @@ async function main() {
     return;
   }
   if (command === "--version") {
-    console.log("0.1.0-alpha.1");
+    console.log("0.1.0-alpha.2");
     return;
   }
   if (command === "setup") {
@@ -54,6 +55,17 @@ async function main() {
   }
   if (command === "unregister") {
     console.log(JSON.stringify(unregisterClients(state), null, 2));
+    return;
+  }
+  if (command === "enable" || command === "disable") {
+    const agent = Agent.parse(raw[0]);
+    console.log(
+      JSON.stringify(
+        setAgentEnabled(state, agent, command === "enable"),
+        null,
+        2,
+      ),
+    );
     return;
   }
   if (command === "register") {
@@ -98,9 +110,11 @@ async function main() {
         await refreshUsage(store, config);
         result = {
           ...health(store),
+          enabled: Object.fromEntries(
+            agents.map((a) => [a, config.agents[a].enabled]),
+          ),
           subscriptions: await availability(config, store),
-          codex: store.usage("codex"),
-          claude: store.usage("claude"),
+          ...Object.fromEntries(agents.map((a) => [a, store.usage(a)])),
           allowedRoots: config.allowedRoots,
           snooze: !!config.snooze,
           delivery: {
@@ -127,8 +141,10 @@ async function main() {
       case "status":
         result = {
           ...health(store),
-          codex: store.usage("codex"),
-          claude: store.usage("claude"),
+          enabled: Object.fromEntries(
+            agents.map((a) => [a, config.agents[a].enabled]),
+          ),
+          ...Object.fromEntries(agents.map((a) => [a, store.usage(a)])),
           tasks: store.list(20).map(view),
         };
         break;
@@ -139,7 +155,7 @@ async function main() {
         const { z } = await import("zod");
         const data = z
           .object({
-            agent: z.enum(["codex", "claude"]),
+            agent: Agent,
             remainingPercent: z.number().min(0).max(100).optional(),
             resetsAt: z.number().optional(),
             blockedUntil: z.number().optional(),

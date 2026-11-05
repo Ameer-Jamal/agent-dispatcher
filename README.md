@@ -2,9 +2,9 @@
 
 Keep one conversation. Send bounded work to a suitable subscription-backed coding agent, then bring its evidence and changes back to the original chat.
 
-**Local alpha · macOS · Node.js 22.13+ or 24 · Codex and Claude Code**
+**Local alpha · macOS · Node.js 22.13+ · Codex, Claude Code, Cursor, Antigravity and OpenCode Go workers**
 
-The dispatcher favors Claude for substantial execution and protects a configurable 30% Codex allowance reserve. The queue, process monitoring and completion checks run in ordinary code; they do not spend model turns polling.
+The dispatcher favors Claude for implementation, OpenCode Go for maintenance and Antigravity for reviews, while protecting a configurable 30% Codex allowance reserve. These are configurable starting preferences, not learned quality rankings. The queue, process monitoring and completion checks run in ordinary code; they do not spend model turns polling.
 
 ## Install
 
@@ -41,11 +41,31 @@ The launcher enables a **custom development channel**, currently a Claude Code r
 
 Workers return a patch, their summary, check evidence and session ID. The originating agent reviews them, applies acceptable changes with `agent-dispatcher apply TASK_ID`, and responds where you started. There is no automatic merge or publication. `completed` means the worker reported success; the coordinator still verifies acceptance criteria.
 
+## Additional workers
+
+Existing configurations keep new workers disabled until you enable them:
+
+```sh
+agent-dispatcher enable antigravity
+agent-dispatcher enable opencode
+agent-dispatcher doctor
+# After signing in and confirming accessible models:
+agent-dispatcher enable cursor
+# Disable a worker at any time:
+agent-dispatcher disable cursor
+```
+
+Authentication and quota checks still run before launch. OpenCode is restricted to the `opencode-go/` provider, so it cannot consume the ChatGPT allowance or silently use console/API billing. The default maintenance model is `opencode-go/minimax-m3`; choose another Go model in private configuration if needed. Antigravity defaults to `Gemini 3.8 Flash (High)` and explicitly disables AI-credit overage for worker runs. Both defaults were present in the installed CLIs when verified.
+
+Cursor requires a usable account, not merely a cached login: the dispatcher also checks `agent models`. Its adapter remains unavailable when the CLI returns no models. Worker permission controls remain enabled; `--force`, `--auto` and permission-bypass flags are not used to make tests pass.
+
+Automatic completion delivery still targets Codex chats through Snooze and Claude Code through the channel launcher. The three additional agents are **workers**, not new conversation frontends. See [agent support and routing](docs/agents.md).
+
 ## Routing
 
-- Automatic execution prefers authenticated Claude Code.
+- `taskType` chooses a configurable preference list: implementation/investigation prefer Claude; reviews prefer Antigravity; maintenance prefers OpenCode Go. Disabled, unauthenticated and exhausted workers are excluded. Cursor participates when enabled and accessible; Codex remains the protected final fallback.
 - Codex requires fresh measured allowance above the reserve for automatic selection. A concrete capability advantage can select it ahead of Claude; it can also serve as an availability fallback.
-- An explicit `prefer` overrides the reserve, but never authentication or a quota cooldown. A model override requires an explicit agent preference to avoid sending vendor-specific model names to another vendor.
+- An explicit `prefer` overrides the reserve, but never disabled status, authentication, a known exhausted quota or a quota cooldown. A model override requires an explicit agent preference to avoid sending vendor-specific model names to another vendor.
 - All reported Codex allowance windows contribute to the minimum remaining headroom. Unknown, stale or manually estimated Codex usage cannot authorize automatic Codex work.
 - Automatic Codex workers are checked at most once per minute and stopped when a measured reserve threshold is reached. Your interactive conversation itself is not capped by this service.
 - A classified quota/availability failure permits one fallback. Explicit worker preferences are pinned. Other failures are returned for assessment.

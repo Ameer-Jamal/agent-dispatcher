@@ -12,9 +12,12 @@ import { Store } from "../dist/src/store.js";
 import { submit, runTask } from "../dist/src/dispatcher.js";
 const args = process.argv.slice(2);
 const agent = args[args.indexOf("--agent") + 1];
-if (!args.includes("--live") || !["codex", "claude"].includes(agent)) {
+if (
+  !args.includes("--live") ||
+  !["codex", "claude", "cursor", "antigravity", "opencode"].includes(agent)
+) {
   throw new Error(
-    "Explicit opt-in required: node scripts/live-smoke.mjs --live --agent codex|claude",
+    "Explicit opt-in required: node scripts/live-smoke.mjs --live --agent codex|claude|cursor|antigravity|opencode",
   );
 }
 const root = realpathSync(mkdtempSync(join(tmpdir(), "dispatcher-live-")));
@@ -37,7 +40,11 @@ writeFileSync(
 git("add", ".");
 git("commit", "-qm", "fixture");
 const store = new Store(join(root, "state"));
-const config = configSchema.parse({ allowedRoots: [repo], timeoutSeconds: 90 });
+const config = configSchema.parse({
+  allowedRoots: [repo],
+  timeoutSeconds: 90,
+  agents: { [agent]: { enabled: true } },
+});
 try {
   const task = submit(store, config, {
     goal: "Create dispatcher-smoke.txt containing exactly ok followed by one newline. Verify its content by reading it. Do no other work. Return one sentence reporting the result.",

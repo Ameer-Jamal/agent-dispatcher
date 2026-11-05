@@ -9,9 +9,13 @@ Verified locally on macOS with Node 22:
 - Clean tarball installation, installed CLI version/help smoke checks, package-content inspection and SHA-256 generation.
 - A bounded **live Codex subscription** worker created one file in an isolated fixture checkout; its exact contents were independently verified.
 - A bounded **live Claude subscription** worker also created the fixture file; its exact contents were independently verified.
+- Bounded **live Antigravity and OpenCode Go** workers created the same fixture file; exact contents were independently verified.
+- Antigravity account probes returned grouped five-hour/weekly quota with zero inference turns and tokens.
 - Live Codex account reads returned separate five-hour and weekly allowance measurements.
 
 Not verified live:
+
+- Cursor execution: the CLI reported a cached login, but no models were available and headless authentication failed. The adapter is implemented and tested with fixtures; automatic use remains disabled.
 
 - End-to-end delivery into an actual interactive Codex/Claude chat. Mock transport/Snooze tests cover the contracts, but queue acceptance is not proof of model receipt.
 - GitHub-hosted CI, Linux runtime and Node 24: configured in the CI matrix, not represented as executed locally.
