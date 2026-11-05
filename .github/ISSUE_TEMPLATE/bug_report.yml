@@ -1,0 +1,21 @@
+name: Bug report
+description: Report a reproducible dispatcher failure
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include CLI versions and operating system. Remove private task content, paths and credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Sanitized evidence
+      description: Include task/delivery states, authentication method and usage freshness; never include account or chat identifiers.

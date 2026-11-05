@@ -1,0 +1,12 @@
+{
+  "reservePercent": 30,
+  "usageMaxAgeSeconds": 180,
+  "timeoutSeconds": 1800,
+  "maxOutputBytes": 2000000,
+  "allowedRoots": ["/absolute/path/to/projects"],
+  "agents": {
+    "codex": { "command": "codex", "pool": "chatgpt-primary" },
+    "claude": { "command": "claude", "pool": "claude-primary" }
+  },
+  "snooze": { "command": "snooze-mcp", "args": [] }
+}

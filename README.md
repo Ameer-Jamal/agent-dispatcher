@@ -1,0 +1,70 @@
+# Agent Dispatcher
+
+Keep one conversation. Send bounded work to a suitable subscription-backed coding agent, then bring its evidence and changes back to the original chat.
+
+**Local alpha · macOS · Node.js 22.13+ or 24 · Codex and Claude Code**
+
+The dispatcher favors Claude for substantial execution and protects a configurable 30% Codex allowance reserve. The queue, process monitoring and completion checks run in ordinary code; they do not spend model turns polling.
+
+## Install
+
+```sh
+npm ci
+npm run check
+npm run package:check
+npm link
+agent-dispatcher setup --root /absolute/path/to/your/projects
+agent-dispatcher doctor
+agent-dispatcher register
+agent-dispatcher service install
+```
+
+`setup` preserves existing settings and detects Snooze from the local Codex configuration when present. `register` adds MCP entries to Codex and Claude Code, backs up changed files, and preserves existing entries. Reconnect clients after registering. The MCP server supplies coordinator instructions; an inspectable copy is saved in the private state directory.
+
+Sign in through `codex login` and `claude auth login`. `doctor` checks authentication and reads available Codex allowance; it does not run inference. Claude must report `authMethod: claude.ai`. API keys, API helper authentication and third-party billing routes are not accepted as subscription workers.
+
+**Account billing:** the dispatcher never purchases credits, enables overage or switches to API billing. Existing provider-side extra-usage settings are outside its control. Disable extra usage/automatic reload in your provider accounts before unattended use. A reserve is a launch policy and periodic stop signal, not a guaranteed spend cap: usage observations can lag and one request can cross it.
+
+## One conversation
+
+In Codex, ask for work normally. The coordinator can dispatch a bounded task and wait for Snooze to notify the same chat. Snooze must be configured and its worker running for automatic Codex delivery. A task can still complete when notification delivery is unavailable; its result remains in the dispatcher inbox.
+
+For Claude Code, start a channel-enabled session:
+
+```sh
+agent-dispatcher claude
+# Reconnect later to the exact originating session:
+agent-dispatcher claude --resume SESSION_UUID
+```
+
+The launcher enables a **custom development channel**, currently a Claude Code research preview. This is a channel-loading option, not a permission-bypass option. Ordinary Claude MCP registration supports submitting and reading tasks, but cannot itself push completion messages into an existing chat. Other Claude apps are outside v1.
+
+Workers return a patch, their summary, check evidence and session ID. The originating agent reviews them, applies acceptable changes with `agent-dispatcher apply TASK_ID`, and responds where you started. There is no automatic merge or publication. `completed` means the worker reported success; the coordinator still verifies acceptance criteria.
+
+## Routing
+
+- Automatic execution prefers authenticated Claude Code.
+- Codex requires fresh measured allowance above the reserve for automatic selection. A concrete capability advantage can select it ahead of Claude; it can also serve as an availability fallback.
+- An explicit `prefer` overrides the reserve, but never authentication or a quota cooldown. A model override requires an explicit agent preference to avoid sending vendor-specific model names to another vendor.
+- All reported Codex allowance windows contribute to the minimum remaining headroom. Unknown, stale or manually estimated Codex usage cannot authorize automatic Codex work.
+- Automatic Codex workers are checked at most once per minute and stopped when a measured reserve threshold is reached. Your interactive conversation itself is not capped by this service.
+- A classified quota/availability failure permits one fallback. Explicit worker preferences are pinned. Other failures are returned for assessment.
+- Claude remaining allowance is marked unknown unless manually estimated. Observed quota failures impose a measured reset cooldown, or a conservative 30-minute cooldown when no reset is known. Subscription price is not treated as a usage measurement.
+
+## Operations
+
+```sh
+agent-dispatcher status
+agent-dispatcher get TASK_ID
+agent-dispatcher cancel TASK_ID
+agent-dispatcher service stop
+agent-dispatcher service start
+agent-dispatcher service uninstall
+npm unlink -g @ameer-jamal/agent-dispatcher
+```
+
+Uninstalling the service retains configuration, results and MCP entries. Use `unregister` to remove only dispatcher entries that point at this installation. Keep the installation directory while a service or MCP entry references its built executable.
+
+Each dispatch must target an allowed **Git repository root with an existing HEAD**. V1 rejects submodule repositories. Input snapshots include tracked changes and non-ignored untracked files, preserving the original index. Keep secrets ignored. Workers run in retained isolated worktrees, under the CLI's native permission controls. Permission denial returns a block.
+
+See [configuration and tools](docs/reference.md), [architecture](docs/architecture.md), [troubleshooting](docs/troubleshooting.md), [contributing](CONTRIBUTING.md) and [security](SECURITY.md).

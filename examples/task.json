@@ -1,0 +1,7 @@
+{
+  "goal": "Fix the parser failure and verify the existing parser tests",
+  "cwd": "/absolute/path/to/repository",
+  "files": ["src/parser.ts"],
+  "acceptanceChecks": ["Existing parser tests pass"],
+  "idempotencyKey": "parser-fix-001"
+}
