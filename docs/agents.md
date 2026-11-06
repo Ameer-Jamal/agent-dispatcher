@@ -29,6 +29,8 @@ Additional workers require macOS configuration isolation and current supported C
 
 ## Muse
 
-The local Muse gateway exposes read-only tools; it is not a headless Muse worker or task-launch API. This change leaves that gateway and its allowlists unchanged. No Muse subscription adapter is claimed. A documented launch/result interface would be needed before adding one.
+Muse can submit work through its existing authenticated Tailscale gateway at `/mcp/agent-dispatcher`. Dispatch and cancellation follow that gateway's per-action local approval flow; reads are restricted to its approved submissions. Results remain isolated, with no automatic patch application or completion push into Muse.
+
+This makes Muse another coordinator, not a headless worker target. See [Muse gateway workflow](muse-gateway.md). Existing gateway services and their policies are preserved.
 
 See the [verification record](verification.md) for live versus fixture coverage.
