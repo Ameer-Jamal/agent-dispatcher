@@ -46,5 +46,23 @@
   },
   "overrides": {
     "minimatch": "^11.0.4"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ameer-Jamal/agent-dispatcher.git"
+  },
+  "homepage": "https://github.com/Ameer-Jamal/agent-dispatcher#readme",
+  "bugs": {
+    "url": "https://github.com/Ameer-Jamal/agent-dispatcher/issues"
+  },
+  "keywords": [
+    "mcp",
+    "agents",
+    "dispatcher",
+    "codex",
+    "claude",
+    "antigravity",
+    "opencode",
+    "cursor"
+  ]
 }

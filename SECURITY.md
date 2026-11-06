@@ -10,4 +10,4 @@ Tasks, summaries and logs can contain sensitive source data. State/artifacts are
 
 Cancellation can stop future local processing, but cannot retract work already done, inference already billed or queued chat messages. Provider-side operations cannot be rolled back by deleting a task. Uncertain delivery is never blindly retried.
 
-Before a public remote is established, report vulnerabilities through the repository owner's private contact channel. Once GitHub private vulnerability reporting is enabled, use Security → Report a vulnerability. Do not publish credentials, task logs or exploit details in a public issue.
+Report vulnerabilities through [GitHub private vulnerability reporting](https://github.com/Ameer-Jamal/agent-dispatcher/security/advisories/new). Include affected versions, a minimal reproduction and expected impact. Do not publish credentials, task logs or exploit details in a public issue.
