@@ -41,7 +41,7 @@
     "eslint": "^10.14.0",
     "prettier": "^3.0.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.9.0",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.72.1"
   },
   "overrides": {
