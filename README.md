@@ -3,6 +3,8 @@
 [![CI](https://github.com/Ameer-Jamal/agent-dispatcher/actions/workflows/ci.yml/badge.svg)](https://github.com/Ameer-Jamal/agent-dispatcher/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+![Agent Dispatcher routes bounded work from one local conversation to Claude, Codex, Cursor, Antigravity and OpenCode Go, with a 30% Codex allowance reserve.](docs/assets/agent-dispatcher-banner.png)
+
 Keep one conversation. Send bounded work to a suitable subscription-backed coding agent, then bring its evidence and changes back to the original chat.
 
 **Local alpha · macOS · Node.js 22.13+ · Codex, Claude Code, Cursor, Antigravity and OpenCode Go workers**
