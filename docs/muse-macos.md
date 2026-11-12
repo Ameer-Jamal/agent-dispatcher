@@ -66,7 +66,21 @@ It cannot use this browser project merely by changing the executable: the CLI
 arguments and receipt semantics need a separate adapter. No browser profile,
 login cookies, or credentials belong in the dispatcher repository.
 
-The Mac app UI POC already created a one-time reminder and the user confirmed
-its Android notification. A browser session was opened for an independent DOM
-automation test; it requires its own normal Muse login. Neither result should
-be described as a tested standalone MCP-to-Muse browser adapter.
+The Mac app UI POC created a one-time reminder and the user confirmed its
+Android notification. The user then completed normal Muse web sign-in in a
+separate browser session. Through Codex's supported browser automation:
+
+- Created one disposable reminder titled `Mac browser POC disposable`.
+- Read its actual scheduled-task panel: November 12, 2026 at 2:26 pm Phoenix time.
+- Asked Muse to reschedule that same task to 3:15 pm Phoenix time.
+- Reopened the task panel and verified the saved time changed to 3:15 pm.
+
+- Asked Muse to cancel the disposable reminder and received its confirmation.
+- Read the live scheduled-task region: the disposable task was gone; the
+  guardian reminder, flight check, and heartbeat were still present.
+
+No real Bluetooth pairing was attempted. These results prove the browser interaction
+path, not a tested standalone dispatcher-to-browser MCP adapter. A production
+browser transport still needs dedicated profile management, correlated replies,
+serialized requests, durable no-replay receipts and explicit handling of login
+expiry and uncertain results.
