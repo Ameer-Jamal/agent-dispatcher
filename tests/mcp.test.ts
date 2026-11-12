@@ -6,7 +6,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { z } from "zod";
 import { fixture, eventually } from "./helpers.js";
 import { finish, runTask } from "../src/dispatcher.js";
-test("MCP exposes five tools and task submission returns without launching inference", async () => {
+test("MCP exposes coding and opt-in Muse tools; task submission does not launch inference", async () => {
   const f = fixture();
   const client = new Client({ name: "fixture", version: "1" });
   try {
@@ -18,7 +18,9 @@ test("MCP exposes five tools and task submission returns without launching infer
       }),
     );
     const listing = await client.listTools();
-    assert.equal(listing.tools.length, 5);
+    assert.equal(listing.tools.length, 8);
+    const muse = await client.callTool({ name: "muse_status", arguments: {} });
+    assert.match(JSON.stringify(muse.content), /connectionVerified/);
     const r = await client.callTool({
       name: "dispatch_task",
       arguments: f.input,

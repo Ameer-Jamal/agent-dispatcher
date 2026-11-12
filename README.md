@@ -46,6 +46,13 @@ The launcher enables a **custom development channel**, currently a Claude Code r
 
 Workers return a patch, their summary, check evidence and session ID. The originating agent reviews them, applies acceptable changes with `agent-dispatcher apply TASK_ID`, and responds where you started. There is no automatic merge or publication. `completed` means the worker reported success; the coordinator still verifies acceptance criteria.
 
+## Personal Muse requests (POC)
+
+An optional [Muse destination](docs/muse.md) sends explicit requests through Meta's official paired Linux Gadget CLI. It is disabled by default and separate from
+coding workers. MCP adds `muse_status`, `send_muse_request`, and
+`get_muse_request`; CLI adds `muse-status`, `muse-send`, and `muse-get`.
+A reply does not prove reminder scheduling or phone notification delivery.
+
 ## Additional workers
 
 Existing configurations keep new workers disabled until you enable them:

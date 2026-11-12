@@ -23,6 +23,12 @@ Configuration:
 
 ## MCP tools
 
+The optional personal Muse destination adds `muse_status`, `send_muse_request`
+(`message`, `idempotencyKey`), and `get_muse_request` (`requestId`). It is disabled
+by default. See [Muse setup and receipt semantics](muse.md), including the
+paired Linux Gadget requirement and `muse.command`, `muse.args`,
+`muse.waitSeconds`, and `muse.enabled` configuration fields.
+
 `dispatch_task` accepts:
 
 ```json
@@ -46,6 +52,9 @@ Configuration:
 ## CLI
 
 `dispatch FILE.json` uses the same task schema. `get`, `status`, `cancel`, `apply`, `doctor`, `enable`, `disable`, `register`, `unregister`, `worker`, `serve`, `claude` and `service` are described by `--help`.
+
+`muse-status`, `muse-send REQUEST.json`, and `muse-get REQUEST_UUID` use the
+separate personal Muse destination. They do not create coding-worker tasks.
 
 `usage-set FILE.json` stores an **estimated**, never measured, observation:
 
