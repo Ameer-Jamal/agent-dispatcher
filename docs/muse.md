@@ -8,6 +8,10 @@ your Muse allowance and are not covered by the coding-worker reserve.
 
 ## Official transport
 
+The stock transport below targets a paired Linux Gadget. The core SDK is largely
+portable: see the [Mac-only feasibility investigation](muse-macos.md) for the
+actual macOS test results, remaining pairing work, and browser alternative.
+
 Meta's [Muse Gadget SDK](https://github.com/facebookincubator/muse-gadget-sdk/tree/main/linux)
 documents `musegadget send-user-msg --session-id UUID --wait SECONDS -`.
 The dash reads the message from stdin. Each request gets a dedicated side chat
