@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { privateDir, type Config } from "./config.js";
 import { run } from "./process.js";
+import { sendPairedMuse } from "./muse-client.js";
 
 export const museRequestSchema = z
   .object({
@@ -27,10 +28,12 @@ export interface MuseReceipt {
 export function museStatus(config: Config) {
   return {
     enabled: config.muse.enabled,
-    transport: "official-muse-gadget-cli",
+    transport: config.muse.transport,
     connectionVerified: false,
     requires:
-      "A running, paired Linux Muse Gadget service and socket access. Configuration is not a connection check.",
+      config.muse.transport === "muse-client"
+        ? "Saved Muse client device pairing. No browser or Linux host required. Configuration is not a connection check."
+        : "A running, paired Linux Muse Gadget service and socket access. Configuration is not a connection check.",
   };
 }
 
@@ -91,7 +94,7 @@ export class MuseRequests {
         status: config.muse.enabled ? "unknown" : "blocked",
         detail: config.muse.enabled
           ? "Submission may have occurred. Do not resend; inspect the dedicated Muse side chat."
-          : "Muse is disabled. Configure a paired gadget transport before submitting a new request.",
+          : "Muse is disabled. Configure a paired transport before submitting a new request.",
         reminderVerified: false,
       };
       this.db
@@ -108,6 +111,15 @@ export class MuseRequests {
       throw error;
     }
     if (!config.muse.enabled) return receipt;
+    if (config.muse.transport === "muse-client") {
+      const result = await sendPairedMuse(
+        config.muse.credentialsDirectory,
+        input.message,
+        receipt.sessionId,
+        config.muse.waitSeconds,
+      );
+      return this.update({ ...receipt, ...result });
+    }
     let spawned = false;
     try {
       const result = await run(

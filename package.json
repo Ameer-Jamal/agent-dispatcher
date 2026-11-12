@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "muse-client": "0.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

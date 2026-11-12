@@ -48,7 +48,7 @@ Workers return a patch, their summary, check evidence and session ID. The origin
 
 ## Personal Muse requests (POC)
 
-An optional [Muse destination](docs/muse.md) sends explicit requests through Meta's official paired Linux Gadget CLI. It is disabled by default and separate from
+An optional [Muse destination](docs/muse.md) sends explicit requests through a paired Mac `muse-client` connection or Meta's Linux Gadget CLI. It is disabled by default and separate from
 coding workers. MCP adds `muse_status`, `send_muse_request`, and
 `get_muse_request`; CLI adds `muse-status`, `muse-send`, and `muse-get`.
 A reply does not prove reminder scheduling or phone notification delivery.

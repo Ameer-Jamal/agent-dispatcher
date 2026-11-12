@@ -27,6 +27,30 @@ terms, or grants new device access automatically.
 
 ## Enable locally
 
+For a Mac paired using `muse-client`, install that client's pairing helper and
+complete pairing with your own phone and SDK token. Then select the in-process
+transport in the private dispatcher configuration:
+
+```json
+{
+  "muse": {
+    "enabled": true,
+    "transport": "muse-client",
+    "credentialsDirectory": "/absolute/path/to/your/private/pairing-directory",
+    "waitSeconds": 60
+  }
+}
+```
+
+This route needs no browser or Linux host and registers no shell/file controls.
+It uses an exclusive `dispatcher-client.lock` in the pairing directory to prevent
+two dispatchers from rotating credentials concurrently. Other applications must
+also avoid using that pairing concurrently. A crashed owner's lock requires
+manual inspection; it is never removed automatically. The first message creates
+each dedicated side chat before subscription, so an unusually fast reply may be
+missed; that is reported as submitted, with no resend. A complete text reply is
+not proof the reminder task finished or the phone received a notification.
+
 Add this object to your private dispatcher `config.json` on the paired Linux host:
 
 ```json

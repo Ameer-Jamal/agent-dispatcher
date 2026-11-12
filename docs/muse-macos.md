@@ -84,3 +84,33 @@ path, not a tested standalone dispatcher-to-browser MCP adapter. A production
 browser transport still needs dedicated profile management, correlated replies,
 serialized requests, durable no-replay receipts and explicit handling of login
 expiry and uncertain results.
+
+## Paired Mac SDK POC follow-up
+
+The `wong2/muse-client` repository already implements macOS pairing using a small
+CoreBluetooth helper. It is a TypeScript client of the Gadget protocol, not the
+browser-based Muse-Chat-MCP project. Its repository at commit `1043c16` passed
+58 tests; the separately enabled Python-reference interoperability test also
+passed, for 59 passing tests overall. Type checking, the library build and native
+helper compilation succeeded.
+
+On November 12, 2026, the user paired the Mac helper with Muse on a OnePlus
+Android phone. Device credentials were verified and saved outside the repository.
+The connection check established the encrypted Noise session and chat
+subscription. A direct SDK request created one test reminder titled `Muse SDK
+POC`; Muse returned its scheduled time over the SDK connection. The actual Muse
+task panel independently showed November 12 at 3:22 pm America/Phoenix.
+
+The dispatcher now has a `muse-client` transport option using a private pairing
+directory, an exclusive credential-owner lock, dedicated side chats, and the same
+no-replay request ledger. The original Linux CLI transport remains available.
+Real request receipts and pairing credentials stay in private state, never in
+this repository. A live `send_muse_request` call through an actual stdio MCP client returned
+`answered` via the paired Mac transport. Its read-only response confirmed the
+test reminder time and reported that the scheduled run had started. Phone
+notification delivery remains a separate user-observed acceptance check.
+
+No native fork was needed for this POC. Before release, review the client's
+licensing/notices, package maintenance, macOS permission onboarding, and Android
+compatibility beyond this one device. Protocol acknowledgements and returned
+text are never promoted to proof of phone notification delivery.
