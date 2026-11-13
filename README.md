@@ -3,103 +3,116 @@
 [![CI](https://github.com/Ameer-Jamal/agent-dispatcher/actions/workflows/ci.yml/badge.svg)](https://github.com/Ameer-Jamal/agent-dispatcher/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![Minimal dispatch switchboard connecting one input to five geometric worker nodes, with queue blocks and a mint-and-amber capacity bar on charcoal.](docs/assets/agent-dispatcher-banner.png)
+![Agent Dispatcher — one conversation, the right agent for the job.](docs/assets/agent-dispatcher-banner.png)
 
-Keep one conversation. Send bounded work to a suitable subscription-backed coding agent, then bring its evidence and changes back to the original chat.
+**Use your coding subscriptions together. Keep one conversation.**
 
-**Local alpha · macOS · Node.js 22.13+ · Codex, Claude Code, Cursor, Antigravity and OpenCode Go workers**
+Agent Dispatcher is a local MCP server that lets your conversational agent delegate bounded work to Codex, Claude Code, OpenCode Go, Antigravity or Cursor. It chooses an eligible worker, runs the task in an isolated Git worktree, and returns the patch and check evidence to the originating coordinator for review.
 
-The dispatcher favors Claude for implementation, OpenCode Go for maintenance and Antigravity for reviews, while protecting a configurable 30% Codex allowance reserve. These are configurable starting preferences, not learned quality rankings. The queue, process monitoring and completion checks run in ordinary code; they do not spend model turns polling.
+Built for people who already pay for multiple agents and want suitable work routed between them without exhausting their main assistant's allowance.
 
-## Install
+**Local alpha · macOS · Node.js 22.13+ · Native subscription logins**
+
+## What you can ask
+
+> “Fix the bug described in this ticket, add a regression test, and have another agent review the change before we push.”
+>
+> “Update the test fixtures and lint dependencies. Use the subscriptions that make sense and preserve my Codex allowance.”
+>
+> “Investigate the timeout in this repository. Report the cause and a proposed fix before changing code.”
+
+Installed coordinator policies authorize suitable delegation without requiring you to say “dispatch.” The coordinator gathers context, delegates, reviews the result and continues the conversation. Task state survives client disconnects and service restarts.
+
+## How it works
+
+1. **Describe the outcome** in your existing chat. The coordinator supplies a goal, repository, relevant files and acceptance checks.
+2. **Route and execute.** Deterministic rules select an authenticated, enabled worker. A durable single-worker queue runs it in an isolated checkout, including a snapshot of relevant uncommitted work.
+3. **Review and continue.** The coordinator inspects the incremental patch and actual check results, applies acceptable changes, and delegates a follow-up if needed. Conflicting edits are preserved.
+
+Waiting, process monitoring and completion checks use ordinary code, not model calls. Workers do not recursively delegate. Merging and publishing require user authorization.
+
+| Work                                                             | First-choice worker                |
+| ---------------------------------------------------------------- | ---------------------------------- |
+| Features and complex fixes                                       | Claude Code                        |
+| Routine tests, renames, formatting, dependencies and small fixes | OpenCode Go                        |
+| Broad debugging and investigation                                | Claude Code                        |
+| Independent review                                               | Antigravity                        |
+| Explicit requests or a concrete capability advantage             | Codex, subject to allowance policy |
+
+Preferences are configurable. Cursor participates when enabled and its account has accessible models. These defaults are routing choices, not benchmark rankings. See [agent support](docs/agents.md).
+
+## Quickstart
+
+Install and sign in to the native worker CLIs you intend to use. Codex uses `codex login`; Claude Code uses `claude auth login` with subscription authentication (`claude.ai`).
 
 ```sh
+git clone https://github.com/Ameer-Jamal/agent-dispatcher.git
+cd agent-dispatcher
 npm ci
-npm run check
-npm run package:check
+npm run build
 npm link
+
 agent-dispatcher setup --root /absolute/path/to/your/projects
-agent-dispatcher doctor
 agent-dispatcher register
+agent-dispatcher doctor
 agent-dispatcher service install
 ```
 
-`setup` preserves existing settings and detects Snooze from the local Codex configuration when present. `register` adds native MCP entries for Codex, Claude, Cursor, Antigravity and OpenCode V2, installs persistent coordinator policies and lifecycle hooks, backs up changed files, and preserves existing entries. Reconnect clients after registering. The MCP server also supplies coordinator instructions; `setup` saves an inspectable copy in the private state directory. See [coordinator policy](docs/coordinator-policy.md) for Cursor User Rules and lifecycle limits.
+`register` preserves existing settings and installs native MCP entries, coordinator instructions and supported lifecycle hooks. Reconnect clients afterwards. `doctor` checks authentication and available allowance without inference. Each task requires an allowed Git repository root with an existing commit; submodule repositories are not supported.
 
-Sign in through `codex login` and `claude auth login`. `doctor` checks authentication and reads available Codex allowance; it does not run inference. Claude must report `authMethod: claude.ai`. API keys, API helper authentication and third-party billing routes are not accepted as subscription workers.
+Codex and Claude workers are enabled by default. Enable additional subscriptions deliberately:
 
-**Account billing:** the dispatcher never purchases credits, enables overage or switches to API billing. Existing provider-side extra-usage settings are outside its control. Disable extra usage/automatic reload in your provider accounts before unattended use. A reserve is a launch policy and periodic stop signal, not a guaranteed spend cap: usage observations can lag and one request can cross it.
+```sh
+agent-dispatcher enable opencode
+agent-dispatcher enable antigravity
+agent-dispatcher enable cursor
+agent-dispatcher doctor
+```
 
-## One conversation
+OpenCode workers are restricted to the `opencode-go/` provider. No silent API-billing substitution, credit purchase or subscription change is performed. Provider-side extra-usage settings remain under your account's control.
 
-In Codex, ask for work normally. The coordinator can dispatch a bounded task and wait for Snooze to notify the same chat. Snooze must be configured and its worker running for automatic Codex delivery. A task can still complete when notification delivery is unavailable; its result remains in the dispatcher inbox.
+## Keep the original conversation
 
-For Claude Code, start a channel-enabled session:
+**Codex:** completion delivery uses Snooze, detected during setup when configured. Its worker must be running and the task must identify the actual originating chat.
+
+**Claude Code:** use the channel launcher for completion delivery:
 
 ```sh
 agent-dispatcher claude
-# Reconnect later to the exact originating session:
 agent-dispatcher claude --resume SESSION_UUID
 ```
 
-The launcher enables a **custom development channel**, currently a Claude Code research preview. This is a channel-loading option, not a permission-bypass option. Ordinary Claude MCP registration supports submitting and reading tasks, but cannot itself push completion messages into an existing chat. Other Claude apps are outside v1.
+This enables Claude Code's custom development channel; it does not bypass permissions.
 
-Workers return a patch, their summary, check evidence and session ID. The originating agent reviews them, applies acceptable changes with `agent-dispatcher apply TASK_ID`, and responds where you started. There is no automatic merge or publication. `completed` means the worker reported success; the coordinator still verifies acceptance criteria.
+**Cursor, Antigravity and OpenCode:** native registration supports coordination, with durable inbox recovery. Automatic completion push into those chats is not implemented. Use `recover_tasks` after resuming rather than repeatedly polling.
 
-## Personal Muse requests (POC)
+**Muse:** a separately configured authenticated Mac gateway can expose dispatch, scoped waiting and reviewed finishing over Tailscale. A separate optional paired Muse transport supports explicit outbound requests. See [Muse gateway](docs/muse-gateway.md) and [paired Muse requests](docs/muse.md); neither guarantees wake-up of a closed conversation.
 
-An optional [Muse destination](docs/muse.md) sends explicit requests through a paired Mac `muse-client` connection or Meta's Linux Gadget CLI. It is disabled by default and separate from
-coding workers. MCP adds `muse_status`, `send_muse_request`, and
-`get_muse_request`; CLI adds `muse-status`, `muse-send`, and `muse-get`.
-A reply does not prove reminder scheduling or phone notification delivery.
-A live phone test arrived about one to two minutes late; timing is best effort.
+## Allowance and execution limits
 
-## Additional workers
+- **Protect Codex:** automatic workers require fresh measured headroom above a configurable reserve, 30% by default. Explicit worker selection can override that reserve. It cannot bypass authentication or known exhaustion. The reserve does not cap your interactive chat's usage.
+- **Report uncertainty:** Codex and Antigravity provide measured windows. Claude, OpenCode Go and Cursor remaining balances are unknown unless estimated. Status includes observation/reset times where available and observed quota cooldowns.
+- **Keep native permissions:** allowed work runs unattended; denied actions return a blocked result. There is no unrestricted YOLO mode or relay for approving a worker prompt from another chat.
+- **Supply external context:** workers have empty/isolated MCP configuration. The coordinator retrieves Jira tickets or other connected context and includes what the worker needs.
+- **Recover safely:** one classified quota/availability failure permits a fallback. Other failures and uncertain execution require coordinator assessment. Notification delivery is distinct from confirmed receipt.
 
-Existing configurations keep new workers disabled until you enable them:
+See [workflows and boundaries](docs/workflows.md) for remote coding examples, iterative delegation and the limits of computer control.
 
-```sh
-agent-dispatcher enable antigravity
-agent-dispatcher enable opencode
-agent-dispatcher doctor
-# After signing in and confirming accessible models:
-agent-dispatcher enable cursor
-# Disable a worker at any time:
-agent-dispatcher disable cursor
-```
-
-Authentication and quota checks still run before launch. OpenCode is restricted to the `opencode-go/` provider, so it cannot consume the ChatGPT allowance or silently use console/API billing. The default maintenance model is `opencode-go/minimax-m3`; choose another Go model in private configuration if needed. Antigravity defaults to `Gemini 3.8 Flash (High)` and explicitly disables AI-credit overage for worker runs. Both defaults were present in the installed CLIs when verified.
-
-Cursor requires a usable account, not merely a cached login: the dispatcher also checks `agent models`. Its adapter remains unavailable when the CLI returns no models. Worker permission controls remain enabled; `--force`, `--auto` and permission-bypass flags are not used to make tests pass.
-
-Automatic completion delivery still targets Codex chats through Snooze and Claude Code through the channel launcher. The three additional agents are **workers**, not new conversation frontends. See [agent support and routing](docs/agents.md).
-
-## Routing
-
-- `taskType` chooses a configurable preference list: implementation/investigation prefer Claude; reviews prefer Antigravity; maintenance prefers OpenCode Go. Disabled, unauthenticated and exhausted workers are excluded. Cursor participates when enabled and accessible; Codex remains the protected final fallback.
-- Codex requires fresh measured allowance above the reserve for automatic selection. A concrete capability advantage can select it ahead of Claude; it can also serve as an availability fallback.
-- An explicit `prefer` overrides the reserve, but never disabled status, authentication, a known exhausted quota or a quota cooldown. A model override requires an explicit agent preference to avoid sending vendor-specific model names to another vendor.
-- All reported Codex allowance windows contribute to the minimum remaining headroom. Unknown, stale or manually estimated Codex usage cannot authorize automatic Codex work.
-- Automatic Codex workers are checked at most once per minute and stopped when a measured reserve threshold is reached. Your interactive conversation itself is not capped by this service.
-- A classified quota/availability failure permits one fallback. Explicit worker preferences are pinned. Other failures are returned for assessment.
-- Claude remaining allowance is marked unknown unless manually estimated. Observed quota failures impose a measured reset cooldown, or a conservative 30-minute cooldown when no reset is known. Subscription price is not treated as a usage measurement.
-
-## Operations
+## Manage the service
 
 ```sh
 agent-dispatcher status
+agent-dispatcher recover /absolute/path/to/repository
 agent-dispatcher get TASK_ID
 agent-dispatcher cancel TASK_ID
 agent-dispatcher service stop
 agent-dispatcher service start
-agent-dispatcher service uninstall
-npm unlink -g @ameer-jamal/agent-dispatcher
 ```
 
-Uninstalling the service retains configuration, results and MCP entries. Use `unregister` to remove only dispatcher entries that point at this installation. Keep the installation directory while a service or MCP entry references its built executable.
+To remove the integration, run `service uninstall`, `unregister`, then `npm unlink -g @ameer-jamal/agent-dispatcher`. Private configuration and saved results are retained. Cursor User Rules added through its UI are removed there. See [configuration and interfaces](docs/reference.md) for state locations and lifecycle details.
 
-Each dispatch must target an allowed **Git repository root with an existing HEAD**. V1 rejects submodule repositories. Input snapshots include tracked changes and non-ignored untracked files, preserving the original index. Keep secrets ignored. Workers run in retained isolated worktrees, under the CLI's native permission controls. Permission denial returns a block.
+## Documentation
 
-See [configuration and tools](docs/reference.md), [architecture](docs/architecture.md), [troubleshooting](docs/troubleshooting.md), [contributing](CONTRIBUTING.md) and [security](SECURITY.md).
+[Configuration and tools](docs/reference.md) · [Architecture](docs/architecture.md) · [Coordinator policies](docs/coordinator-policy.md) · [Troubleshooting](docs/troubleshooting.md) · [Verification](docs/verification.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
-See [discretionary delegation and context recovery](docs/coordinator-policy.md) for native client policies, reconnect requirements and honest lifecycle limits.
+MIT licensed. Contributions and focused bug reports are welcome.

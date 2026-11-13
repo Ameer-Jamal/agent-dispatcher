@@ -31,7 +31,7 @@ Additional workers require macOS configuration isolation and current supported C
 
 ## Muse
 
-Muse can submit work through its existing authenticated Tailscale gateway at `/mcp/agent-dispatcher`. Dispatch and cancellation follow that gateway's per-action local approval flow; reads are restricted to its approved submissions. Results remain isolated, with no automatic patch application or completion push into Muse.
+Muse can submit work through a separately installed authenticated Tailscale gateway at `/mcp/agent-dispatcher`. The gateway's configured direct or approval mode governs action acceptance; reads remain scoped to its accepted submissions. Deployments may provide `wait_task` and `finish_task` for bounded waiting and reviewed patch application. Native worker permissions remain active; automatic completion push into Muse is not guaranteed.
 
 This makes Muse another coordinator, not a headless worker target. See [Muse gateway workflow](muse-gateway.md). Existing gateway services and their policies are preserved.
 
