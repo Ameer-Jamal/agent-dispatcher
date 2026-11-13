@@ -2,6 +2,8 @@
 
 ## 0.1.0-alpha.2 — Unreleased
 
+- Explicitly route routine test work, mechanical edits, dependency updates and bounded fixes through the OpenCode-first maintenance category.
+
 - Support direct paired Muse chat on Mac through `muse-client`, with credential ownership locking and no browser dependency.
 
 - Add an opt-in personal Muse request POC using the official paired Gadget CLI, with dedicated side chats, durable receipts, and no automatic replay.

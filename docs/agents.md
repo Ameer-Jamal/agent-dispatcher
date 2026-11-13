@@ -21,6 +21,8 @@ OpenCode's saved OpenAI connection is deliberately excluded. Antigravity's Claud
 | review         | Antigravity, Claude, Cursor, OpenCode, Codex |
 | maintenance    | OpenCode, Claude, Antigravity, Cursor, Codex |
 
+Coordinators should select `maintenance` for routine test updates, mechanical renames, formatting, dependency updates and small bounded fixes. These tasks go to OpenCode first when enabled and authenticated; code edits do not automatically make a task `implementation`. Substantial features and complex fixes use `implementation`. This classification is included in the MCP input schema and installed coordinator policies.
+
 These are provisional capability preferences, not benchmark claims or a goal to consume all subscriptions. Authentication, enabled status, quota cooldown and measured exhaustion filter the list. Automatic Codex launches still require fresh headroom above the reserve. Explicit preferences pin the agent and do not bypass disabled status or exhausted quotas.
 
 New adapters are disabled when loading old configuration. Enable only the workers you intend to use. Model overrides require an explicit agent preference, and OpenCode overrides must remain under `opencode-go/`. Failed or uncertain execution is not replayed automatically; the existing one-fallback limit remains.

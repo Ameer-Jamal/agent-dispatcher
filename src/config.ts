@@ -140,7 +140,9 @@ export const taskSchema = z
     cwd: z.string().min(1),
     files: z.array(z.string().min(1)).max(100).default([]),
     acceptanceChecks: z.array(z.string().min(1)).max(30).default([]),
-    taskType: TaskType.default("implementation"),
+    taskType: TaskType.default("implementation").describe(
+      "Use maintenance for routine test updates, mechanical renames, formatting, dependency updates and small bounded fixes (OpenCode first). Use implementation for substantial features/complex fixes (Claude first), investigation for broad debugging/research, and review for independent review. Choose by the actual work, not by whether it edits code.",
+    ),
     prefer: Agent.optional(),
     model: z.string().min(1).max(200).optional(),
     capabilityReason: z.string().min(1).max(1000).optional(),
