@@ -8,6 +8,7 @@ import { serve, view } from "./mcp.js";
 import { worker, runTask, submit, cancel, health } from "./dispatcher.js";
 import { availability, refreshUsage } from "./usage.js";
 import { applyPatch } from "./worktree.js";
+import { MuseRequests, museRequestSchema, museStatus } from "./muse.js";
 import {
   setup,
   setAgentEnabled,
@@ -16,7 +17,7 @@ import {
   service,
   launchClaude,
 } from "./setup.js";
-const help = `agent-dispatcher 0.1.0-alpha.2\nUsage: agent-dispatcher [--state ABS_PATH] COMMAND\n\nsetup [--root ABS_PATH]  Initialize private config; detect Snooze; preserve defaults\nregister                 Register MCP in Codex/Claude, preserving existing entries\nunregister               Remove matching MCP entries; retain state\nenable|disable AGENT     Control worker eligibility; preserve other settings\ndoctor                   Check subscription authentication and allowance (no inference)\nserve [--channel]        Serve stdio MCP; channels require the Claude launcher\nworker [--once]          Run the durable single-worker scheduler\nservice install|start|stop|uninstall\nclaude [--resume UUID]   Launch Claude Code with completion delivery enabled\ndispatch TASK.json       Queue a task (cwd must be an allowed Git root)\nstatus                   Show health, cached usage and recent task summaries\nget TASK_ID              Read saved task including input and artifacts\ncancel TASK_ID           Stop a task and retain partial work\napply TASK_ID            Apply a completed patch AFTER coordinator review\nusage-set AGENT.json     Save a manual estimated allowance/cooldown\n--help | --version\n`;
+const help = `agent-dispatcher 0.1.0-alpha.2\nUsage: agent-dispatcher [--state ABS_PATH] COMMAND\n\nsetup [--root ABS_PATH]  Initialize private config; detect Snooze; preserve defaults\nregister                 Register MCP in Codex/Claude, preserving existing entries\nunregister               Remove matching MCP entries; retain state\nenable|disable AGENT     Control worker eligibility; preserve other settings\ndoctor                   Check subscription authentication and allowance (no inference)\nserve [--channel]        Serve stdio MCP; channels require the Claude launcher\nworker [--once]          Run the durable single-worker scheduler\nservice install|start|stop|uninstall\nclaude [--resume UUID]   Launch Claude Code with completion delivery enabled\ndispatch TASK.json       Queue a task (cwd must be an allowed Git root)\nstatus                   Show health, cached usage and recent task summaries\nget TASK_ID              Read saved task including input and artifacts\ncancel TASK_ID           Stop a task and retain partial work\napply TASK_ID            Apply a completed patch AFTER coordinator review\nmuse-status              Show configured personal Muse transport (no send)\nmuse-send REQUEST.json   Send one idempotent request via a paired Muse Gadget\nmuse-get REQUEST_UUID    Read a saved Muse receipt without resending\nusage-set AGENT.json     Save a manual estimated allowance/cooldown\n--help | --version\n`;
 async function main() {
   const raw = process.argv.slice(2);
   const stateIndex = raw.indexOf("--state");
@@ -33,6 +34,30 @@ async function main() {
   }
   if (command === "--version") {
     console.log("0.1.0-alpha.2");
+    return;
+  }
+  if (["muse-status", "muse-send", "muse-get"].includes(command)) {
+    if (process.env.AGENT_DISPATCHER_WORKER === "1")
+      throw new Error("Worker Muse access is disabled");
+    if (command === "muse-status") {
+      console.log(JSON.stringify(museStatus(loadConfig(state)), null, 2));
+      return;
+    }
+    const muse = new MuseRequests(state);
+    try {
+      const result =
+        command === "muse-get"
+          ? muse.get(raw[0] ?? "")
+          : await muse.send(
+              loadConfig(state),
+              museRequestSchema.parse(
+                JSON.parse(readFileSync(raw[0] ?? "", "utf8")),
+              ),
+            );
+      console.log(JSON.stringify(result, null, 2));
+    } finally {
+      muse.close();
+    }
     return;
   }
   if (command === "setup") {

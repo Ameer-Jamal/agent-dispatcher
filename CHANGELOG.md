@@ -2,6 +2,10 @@
 
 ## 0.1.0-alpha.2 — Unreleased
 
+- Support direct paired Muse chat on Mac through `muse-client`, with credential ownership locking and no browser dependency.
+
+- Add an opt-in personal Muse request POC using the official paired Gadget CLI, with dedicated side chats, durable receipts, and no automatic replay.
+
 - Add Cursor, Antigravity and OpenCode Go worker adapters, with explicit enable/disable controls.
 - Add task-specific configurable routing while preserving the Codex reserve.
 - Read Antigravity model-group quotas without inference; reject Cursor cached logins without accessible models.

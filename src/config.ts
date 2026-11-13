@@ -39,6 +39,16 @@ const workerConfig = (
     })
     .prefault({});
 export const configSchema = z.object({
+  muse: z
+    .object({
+      enabled: z.boolean().default(false),
+      transport: z.enum(["gadget-cli", "muse-client"]).default("gadget-cli"),
+      credentialsDirectory: z.string().min(1).optional(),
+      command: z.string().min(1).default("musegadget"),
+      args: z.array(z.string()).default(["send-user-msg"]),
+      waitSeconds: z.number().int().min(1).max(60).default(30),
+    })
+    .prefault({}),
   reservePercent: z.number().min(0).max(100).default(30),
   usageMaxAgeSeconds: z.number().int().min(60).default(180),
   timeoutSeconds: z.number().int().min(10).max(14400).default(1800),
