@@ -98,3 +98,32 @@ test("native policies preserve content, JSONC comments, MCP entries and hooks ac
     f.cleanup();
   }
 });
+
+test("startup context stays bounded even with many large saved goals", () => {
+  const f = fixture();
+  try {
+    const sessionId = randomUUID();
+    for (let i = 0; i < 25; i++)
+      f.store.create({
+        ...f.input,
+        goal: "x".repeat(24000),
+        origin: { client: "claude", sessionId },
+        idempotencyKey: `large-${i}`,
+      });
+    const context = sessionContext(f.state, {
+      session_id: sessionId,
+      cwd: f.repo,
+    });
+    assert.ok(JSON.stringify(context).length < 10000);
+    assert.match(JSON.stringify(context), /Agent Dispatcher/);
+    assert.equal(
+      recoverTasks(f.store, {
+        origin: { client: "claude", sessionId },
+        limit: 1,
+      }).tasks[0]?.goal.length,
+      300,
+    );
+  } finally {
+    f.cleanup();
+  }
+});

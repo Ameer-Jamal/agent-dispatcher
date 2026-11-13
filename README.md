@@ -24,7 +24,7 @@ agent-dispatcher register
 agent-dispatcher service install
 ```
 
-`setup` preserves existing settings and detects Snooze from the local Codex configuration when present. `register` adds MCP entries to Codex and Claude Code, backs up changed files, and preserves existing entries. Reconnect clients after registering. The MCP server supplies coordinator instructions; an inspectable copy is saved in the private state directory.
+`setup` preserves existing settings and detects Snooze from the local Codex configuration when present. `register` adds native MCP entries for Codex, Claude, Cursor, Antigravity and OpenCode V2, installs persistent coordinator policies and lifecycle hooks, backs up changed files, and preserves existing entries. Reconnect clients after registering. The MCP server also supplies coordinator instructions; `setup` saves an inspectable copy in the private state directory. See [coordinator policy](docs/coordinator-policy.md) for Cursor User Rules and lifecycle limits.
 
 Sign in through `codex login` and `claude auth login`. `doctor` checks authentication and reads available Codex allowance; it does not run inference. Claude must report `authMethod: claude.ai`. API keys, API helper authentication and third-party billing routes are not accepted as subscription workers.
 

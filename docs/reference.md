@@ -51,6 +51,8 @@ paired Linux Gadget requirement and `muse.command`, `muse.args`,
 
 ## CLI
 
+`recover_tasks` accepts an actual `origin` or exact `cwd`, plus optional `limit` (1–100, default 20). It returns active and unacknowledged work without relaunching or acknowledging it. Session filtering happens before limiting. Workspace discovery can include other conversations; inspect ownership before acting. `recover ABS_CWD` provides the same lookup through the CLI. See [native coordinator policy](coordinator-policy.md).
+
 `dispatch FILE.json` uses the same task schema. `get`, `status`, `cancel`, `apply`, `doctor`, `enable`, `disable`, `register`, `unregister`, `worker`, `serve`, `claude` and `service` are described by `--help`.
 
 `muse-status`, `muse-send REQUEST.json`, and `muse-get REQUEST_UUID` use the
