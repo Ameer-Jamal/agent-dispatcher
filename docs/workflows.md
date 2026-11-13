@@ -21,11 +21,11 @@ A separately configured authenticated gateway can let Muse submit tasks to the M
 
 The configured gateway can support `dispatch_task`, scoped reads, bounded `wait_task`, cancellation and `finish_task`. Direct execution and approval-gated modes are gateway deployment choices, not dispatcher worker permission overrides. A direct-mode gateway accepts authorized tasks without requiring the old local review page. Native worker restrictions still apply.
 
-This does not make arbitrary Mac control a coding-agent capability. “Turn off my monitor” should use a dedicated, explicitly allowed system-action tool. OpenCode's current worker shell allowlist does not permit an arbitrary display-control command. Dispatcher tasks require an allowed Git repository root with an existing commit; they are not a general-purpose remote shell.
+This does not make arbitrary Mac control a coding-agent capability. “Turn off my monitor” should use a dedicated, explicitly allowed system-action tool. There is no named display-control action or OS permission broker in this package; OpenCode permits unattended shell execution inside its task workflow, but that is not a guarantee of access to every Mac operation. Dispatcher tasks require an allowed Git repository root with an existing commit; they are not a general-purpose remote shell.
 
 ## Permissions when away from the computer
 
-Workers execute allowed actions without interactive approval, inside their native sandbox/permission policy. They are **not** launched with unrestricted permission bypass. A denied operation becomes a retained blocked result. The current service cannot forward a worker permission prompt into Muse or another originating chat, accept approval there, and resume that exact paused operation. Native sign-in, OS permission dialogs and actions outside the policy may require local intervention or a later explicitly revised task/policy.
+Workers execute allowed actions without interactive approval, inside their native sandbox/permission policy. OpenCode allows ordinary development shell commands, including dependency installation, without a per-command allowlist. Its package caches are task-local so installs can run inside the OS write boundary. They are **not** launched with unrestricted permission bypass. A denied operation becomes a retained blocked result. The current service cannot forward a worker permission prompt into Muse or another originating chat, accept approval there, and resume that exact paused operation. Native sign-in, OS permission dialogs and actions outside the policy may require local intervention or a later explicitly revised task/policy.
 
 ## Back-and-forth execution
 

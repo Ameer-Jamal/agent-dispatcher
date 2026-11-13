@@ -30,3 +30,13 @@ node scripts/live-smoke.mjs --live --agent claude
 ```
 
 The live script retains private temporary artifacts for inspection. It does not register notifications, merge or publish anything. It consumes the selected subscription's normal allowance. Provider-side extra-usage settings still govern billing.
+
+## Unattended OpenCode development commands
+
+The OpenCode Go development smoke test ran `npm ci --offline --no-audit --no-fund`, executed the fixture's root postinstall lifecycle script, then ran `npm test` without approval prompts. The coordinator independently verified the install, test and completion markers in the isolated checkout. This is a zero-dependency offline fixture: it proves command/lifecycle execution and task-local cache writes, not registry downloads or every project's toolchain.
+
+```sh
+node scripts/live-smoke.mjs --live --agent opencode --development
+```
+
+A routine integration test exercises the same npm install lifecycle and checks under the worker OS profile on macOS (ordinary process execution on Linux). Existing isolation tests continue to verify that extension configuration reads and writes outside task/runtime directories are denied. The local suite contains 55 tests. Live checks consume the selected subscription; routine tests do not invoke models.

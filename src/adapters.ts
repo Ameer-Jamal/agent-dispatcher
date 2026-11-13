@@ -9,7 +9,11 @@ import {
   lstatSync,
 } from "node:fs";
 import { privateDir } from "./config.js";
-import { isolateCommand, prepareCursorSettings } from "./isolation.js";
+import {
+  isolateCommand,
+  prepareCursorSettings,
+  prepareDevelopmentCaches,
+} from "./isolation.js";
 import type { Config, Agent, TaskInput } from "./config.js";
 import { run, subscriptionEnv, type RunResult } from "./process.js";
 export function workerCommand(
@@ -266,6 +270,8 @@ export async function execute(
       throw new Error(
         "OpenCode requires a private worker configuration directory",
       );
+    Object.assign(env, prepareDevelopmentCaches(artifactDir));
+    delete env.NPM_CONFIG_CACHE;
     env.OPENCODE_CONFIG_DIR = privateDir(join(artifactDir, "opencode-config"));
     env.OPENCODE_CONFIG_PROJECT_DISABLE = "1";
     env.OPENCODE_DISABLE_PROJECT_CONFIG = "1";
@@ -277,6 +283,24 @@ export async function execute(
         { action: "provider.use", resource: "opencode-go", effect: "allow" },
         { action: "mcp.use", resource: "*", effect: "deny" },
         { action: "plugin.use", resource: "*", effect: "deny" },
+        // Development is unattended; coordination and publication stay with the parent.
+        ...[
+          "codex",
+          "claude",
+          "agent",
+          "agy",
+          "opencode",
+          "agent-dispatcher",
+        ].map((command) => ({
+          action: "tool.use",
+          resource: `shell:${command} *`,
+          effect: "deny",
+        })),
+        ...["commit", "merge", "push"].map((command) => ({
+          action: "tool.use",
+          resource: `shell:git ${command} *`,
+          effect: "deny",
+        })),
         { action: "skill.use", resource: "*", effect: "deny" },
         { action: "tool.use", resource: "subagent:*", effect: "deny" },
         {
@@ -292,17 +316,8 @@ export async function execute(
         { action: "list", resource: "*", effect: "allow" },
         { action: "glob", resource: "*", effect: "allow" },
         { action: "grep", resource: "*", effect: "allow" },
-        ...[
-          "git status *",
-          "git diff *",
-          "npm test*",
-          "npm run *",
-          "node --test*",
-          "python3 -m pytest*",
-          "ls*",
-          "cat *",
-          "pwd",
-        ].map((resource) => ({ action: "shell", resource, effect: "allow" })),
+        // Ordinary development commands run unattended within the OS write sandbox.
+        { action: "shell", resource: "*", effect: "allow" },
       ],
       mcp: { servers: {} },
       plugins: [],

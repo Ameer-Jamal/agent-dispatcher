@@ -92,7 +92,7 @@ This enables Claude Code's custom development channel; it does not bypass permis
 
 - **Protect Codex:** automatic workers require fresh measured headroom above a configurable reserve, 30% by default. Explicit worker selection can override that reserve. It cannot bypass authentication or known exhaustion. The reserve does not cap your interactive chat's usage.
 - **Report uncertainty:** Codex and Antigravity provide measured windows. Claude, OpenCode Go and Cursor remaining balances are unknown unless estimated. Status includes observation/reset times where available and observed quota cooldowns.
-- **Keep native permissions:** allowed work runs unattended; denied actions return a blocked result. There is no unrestricted YOLO mode or relay for approving a worker prompt from another chat.
+- **Run development work unattended:** OpenCode allows development shell commands, including installs and tests, with task-local package caches inside its OS write sandbox. Other workers use their native sandbox settings. OS or remaining policy denials return a blocked result. There is no unrestricted YOLO mode or relay for approving a worker prompt from another chat.
 - **Supply external context:** workers have empty/isolated MCP configuration. The coordinator retrieves Jira tickets or other connected context and includes what the worker needs.
 - **Recover safely:** one classified quota/availability failure permits a fallback. Other failures and uncertain execution require coordinator assessment. Notification delivery is distinct from confirmed receipt.
 

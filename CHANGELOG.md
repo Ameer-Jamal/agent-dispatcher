@@ -2,6 +2,9 @@
 
 ## 0.1.0-alpha.2 — Unreleased
 
+- Allow OpenCode development commands unattended inside its OS write sandbox and give package managers private task-local caches.
+- Verify offline dependency installation, lifecycle scripts and tests through a real OpenCode Go worker.
+
 - Explicitly route routine test work, mechanical edits, dependency updates and bounded fixes through the OpenCode-first maintenance category.
 
 - Support direct paired Muse chat on Mac through `muse-client`, with credential ownership locking and no browser dependency.

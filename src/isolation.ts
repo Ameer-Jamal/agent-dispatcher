@@ -101,3 +101,22 @@ export function prepareCursorSettings(artifactDir: string, cwd: string) {
   );
   return path;
 }
+
+// The OpenCode OS profile permits writes in the task tree, not the user's home caches.
+export function prepareDevelopmentCaches(
+  artifactDir: string,
+): NodeJS.ProcessEnv {
+  const root = privateDir(join(artifactDir, "development-cache"));
+  return Object.fromEntries(
+    Object.entries({
+      npm_config_cache: "npm",
+      npm_config_devdir: "node-gyp",
+      npm_config_store_dir: "pnpm",
+      BUN_INSTALL_CACHE_DIR: "bun",
+      YARN_CACHE_FOLDER: "yarn",
+      COREPACK_HOME: "corepack",
+      PIP_CACHE_DIR: "pip",
+      UV_CACHE_DIR: "uv",
+    }).map(([key, directory]) => [key, privateDir(join(root, directory))]),
+  );
+}

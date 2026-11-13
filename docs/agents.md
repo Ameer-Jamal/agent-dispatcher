@@ -27,6 +27,8 @@ These are provisional capability preferences, not benchmark claims or a goal to 
 
 New adapters are disabled when loading old configuration. Enable only the workers you intend to use. Model overrides require an explicit agent preference, and OpenCode overrides must remain under `opencode-go/`. Failed or uncertain execution is not replayed automatically; the existing one-fallback limit remains.
 
+OpenCode permits unattended development shell commands inside its OS write sandbox rather than maintaining a per-command allowlist. npm, node-gyp, pnpm, Bun, Yarn, Corepack, pip and uv caches are placed in private task state. Go-only billing, extension isolation and non-recursive dispatch policies remain active.
+
 Additional workers require macOS configuration isolation and current supported CLI features. OpenCode requires V2 2.2.3+ for policy controls. Installed variants were Cursor 2026.01.28-fd13201, Antigravity 1.4.12 and OpenCode 2.2.5. Read CLI diagnostics before updating; the dispatcher does not silently upgrade your other tools.
 
 ## Muse

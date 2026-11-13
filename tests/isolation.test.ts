@@ -9,7 +9,10 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { configurationProfile } from "../src/isolation.js";
+import {
+  configurationProfile,
+  prepareDevelopmentCaches,
+} from "../src/isolation.js";
 import { run } from "../src/process.js";
 test(
   "macOS profile blocks extension reads and writes outside task/runtime directories",
@@ -58,3 +61,54 @@ test(
     }
   },
 );
+
+test("dependency installation and lifecycle checks work with private caches", async () => {
+  const root = mkdtempSync(join(homedir(), ".dispatcher-development-test-"));
+  try {
+    const artifact = join(root, "task"),
+      cwd = join(artifact, "worktree");
+    mkdirSync(cwd, { recursive: true });
+    const pkg = {
+      name: "dispatcher-offline-fixture",
+      version: "1.0.0",
+      scripts: {
+        postinstall:
+          "node -e \"require('fs').writeFileSync('installed.txt','ok')\"",
+        test: "node -e \"require('assert').equal(require('fs').readFileSync('installed.txt','utf8'),'ok')\"",
+      },
+    };
+    writeFileSync(join(cwd, "package.json"), JSON.stringify(pkg));
+    writeFileSync(
+      join(cwd, "package-lock.json"),
+      JSON.stringify({
+        name: pkg.name,
+        version: pkg.version,
+        lockfileVersion: 3,
+        packages: {
+          "": { name: pkg.name, version: pkg.version, hasInstallScript: true },
+        },
+      }),
+    );
+    const env = { ...process.env, ...prepareDevelopmentCaches(artifact) };
+    delete env.NPM_CONFIG_CACHE;
+    for (const args of [
+      ["ci", "--offline", "--no-audit", "--no-fund"],
+      ["test"],
+    ]) {
+      const command =
+        process.platform === "darwin" ? "/usr/bin/sandbox-exec" : "npm";
+      const argv =
+        process.platform === "darwin"
+          ? ["-p", configurationProfile("opencode", cwd), "npm", ...args]
+          : args;
+      const result = await run(command, argv, { cwd, env, timeoutMs: 30000 });
+      assert.equal(result.code, 0, result.stderr + result.stdout);
+    }
+    assert.equal(existsSync(join(cwd, "installed.txt")), true);
+    assert.ok(env.npm_config_cache);
+    assert.ok(env.npm_config_cache.startsWith(artifact));
+    assert.equal(existsSync(join(env.npm_config_cache, "_logs")), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
