@@ -18,7 +18,7 @@ test("MCP exposes coding and opt-in Muse tools; task submission does not launch 
       }),
     );
     const listing = await client.listTools();
-    assert.equal(listing.tools.length, 8);
+    assert.equal(listing.tools.length, 9);
     const muse = await client.callTool({ name: "muse_status", arguments: {} });
     assert.match(JSON.stringify(muse.content), /connectionVerified/);
     const r = await client.callTool({
@@ -28,6 +28,16 @@ test("MCP exposes coding and opt-in Muse tools; task submission does not launch 
     assert.equal(r.isError, undefined);
     assert.equal(f.store.all().length, 1);
     assert.equal(f.store.all()[0]?.status, "queued");
+    const recovered = await client.callTool({
+      name: "recover_tasks",
+      arguments: { cwd: f.repo },
+    });
+    assert.match(JSON.stringify(recovered), new RegExp(f.store.all()[0]!.id));
+    const unscoped = await client.callTool({
+      name: "recover_tasks",
+      arguments: {},
+    });
+    assert.equal(unscoped.isError, true);
     const status = await client.callTool({
       name: "usage_status",
       arguments: {},

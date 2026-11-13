@@ -5,6 +5,9 @@
 - Support direct paired Muse chat on Mac through `muse-client`, with credential ownership locking and no browser dependency.
 
 - Add an opt-in personal Muse request POC using the official paired Gadget CLI, with dedicated side chats, durable receipts, and no automatic replay.
+- Install persistent native coordinator policies and MCP registration across five clients.
+- Add bounded durable session/workspace recovery and Claude lifecycle context injection.
+- Add a native subscription coordinator behavior smoke test; preserve worker recursion limits.
 
 - Add Cursor, Antigravity and OpenCode Go worker adapters, with explicit enable/disable controls.
 - Add task-specific configurable routing while preserving the Codex reserve.

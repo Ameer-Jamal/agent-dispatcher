@@ -34,6 +34,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "muse-client": "0.4.0",
+    "jsonc-parser": "^3.3.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

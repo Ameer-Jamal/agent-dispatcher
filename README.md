@@ -101,3 +101,5 @@ Uninstalling the service retains configuration, results and MCP entries. Use `un
 Each dispatch must target an allowed **Git repository root with an existing HEAD**. V1 rejects submodule repositories. Input snapshots include tracked changes and non-ignored untracked files, preserving the original index. Keep secrets ignored. Workers run in retained isolated worktrees, under the CLI's native permission controls. Permission denial returns a block.
 
 See [configuration and tools](docs/reference.md), [architecture](docs/architecture.md), [troubleshooting](docs/troubleshooting.md), [contributing](CONTRIBUTING.md) and [security](SECURITY.md).
+
+See [discretionary delegation and context recovery](docs/coordinator-policy.md) for native client policies, reconnect requirements and honest lifecycle limits.

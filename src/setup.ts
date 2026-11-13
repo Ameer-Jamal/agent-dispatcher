@@ -12,7 +12,8 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { run } from "./process.js";
 import { entry } from "./dispatcher.js";
-import { coordinatorInstructions } from "./mcp.js";
+import { coordinatorInstructions } from "./coordinator.js";
+import { installClientPolicies } from "./client-policy.js";
 import { initialize, loadConfig, configSchema, type Config } from "./config.js";
 const label = "com.ameer-jamal.agent-dispatcher";
 const xml = (s: string) =>
@@ -45,7 +46,12 @@ export async function service(
     if (existsSync(target)) copyFileSync(target, `${target}.${Date.now()}.bak`);
     writeFileSync(target, launchAgent(state), { mode: 0o600 });
     await run("/bin/launchctl", ["bootout", `${domain}/${label}`]);
-    const r = await run("/bin/launchctl", ["bootstrap", domain, target]);
+    // bootout can return before launchd finishes removing the previous job.
+    let r = await run("/bin/launchctl", ["bootstrap", domain, target]);
+    if (r.code) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      r = await run("/bin/launchctl", ["bootstrap", domain, target]);
+    }
     if (r.code) throw new Error(`LaunchAgent bootstrap failed: ${r.stderr}`);
   } else {
     if (!existsSync(target))
@@ -132,7 +138,8 @@ export function registerClients(state: string) {
   return {
     codex: codexPath,
     claude: claudePath,
-    note: "Existing entries preserved. Reconnect clients. Coordinator instructions are supplied by the MCP server.",
+    ...installClientPolicies(state),
+    note: "Existing entries preserved. Restart/reconnect clients to load tools and native coordinator policy.",
   };
 }
 export function unregisterClients(state: string) {
@@ -173,6 +180,7 @@ export function unregisterClients(state: string) {
   }
   return {
     removed,
+    policies: installClientPolicies(state, true),
     stateRetained: true,
     note: "Custom or nonmatching entries retained",
   };
