@@ -8,8 +8,9 @@ commit `2d9db7d`.
 
 A separate Linux machine is not a fundamental requirement of Muse messaging.
 The stock Gadget installer and Bluetooth backend target Linux, but much of the
-SDK is reusable on macOS. A native Mac port is plausible and has not been paired
-with a real phone in this investigation.
+SDK is reusable on macOS. The stock Linux pairing backend was not ported here. An existing Mac client
+was subsequently paired successfully with an Android phone; see the paired
+Mac SDK POC results below.
 
 On this Mac, the unmodified Linux package's isolated test suite completed with
 **810 passed, 2 skipped in 38.56 seconds**:
@@ -79,7 +80,7 @@ separate browser session. Through Codex's supported browser automation:
 - Read the live scheduled-task region: the disposable task was gone; the
   guardian reminder, flight check, and heartbeat were still present.
 
-No real Bluetooth pairing was attempted. These results prove the browser interaction
+This browser phase did not attempt Bluetooth pairing. These results prove the browser interaction
 path, not a tested standalone dispatcher-to-browser MCP adapter. A production
 browser transport still needs dedicated profile management, correlated replies,
 serialized requests, durable no-replay receipts and explicit handling of login
@@ -107,8 +108,10 @@ no-replay request ledger. The original Linux CLI transport remains available.
 Real request receipts and pairing credentials stay in private state, never in
 this repository. A live `send_muse_request` call through an actual stdio MCP client returned
 `answered` via the paired Mac transport. Its read-only response confirmed the
-test reminder time and reported that the scheduled run had started. Phone
-notification delivery remains a separate user-observed acceptance check.
+test reminder time and reported that the scheduled run had started. A refreshed Muse chat subsequently displayed the reminder-fired message.
+The earlier run-history panel had shown Queued, so its cached view was not used
+as final evidence. Exact Android push arrival and timing remain a separate
+user-observed acceptance check.
 
 No native fork was needed for this POC. Before release, review the client's
 licensing/notices, package maintenance, macOS permission onboarding, and Android
