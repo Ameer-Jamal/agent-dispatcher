@@ -138,6 +138,14 @@ The existing Muse-to-Mac gateway does not expose these new tools automatically;
 its reviewed allowlists remain intact. For this POC, call dispatcher directly
 from a local MCP client or CLI.
 
+## Timing limitation
+
+A live two-minute Drink water test reached the paired OnePlus, with the user
+reporting roughly one to two minutes of lateness. This transport submits
+requests to Muse; it does not provide an exact-time alarm guarantee. A message
+acknowledgement, scheduled-task confirmation, and phone delivery are different
+stages. Use the observed timing when deciding whether this suits a reminder.
+
 ## POC acceptance
 
 Automated tests use a fake CLI and disposable state: check stdin isolation,

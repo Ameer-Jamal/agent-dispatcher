@@ -52,6 +52,7 @@ An optional [Muse destination](docs/muse.md) sends explicit requests through a p
 coding workers. MCP adds `muse_status`, `send_muse_request`, and
 `get_muse_request`; CLI adds `muse-status`, `muse-send`, and `muse-get`.
 A reply does not prove reminder scheduling or phone notification delivery.
+A live phone test arrived about one to two minutes late; timing is best effort.
 
 ## Additional workers
 

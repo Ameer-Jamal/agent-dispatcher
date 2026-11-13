@@ -110,8 +110,11 @@ this repository. A live `send_muse_request` call through an actual stdio MCP cli
 `answered` via the paired Mac transport. Its read-only response confirmed the
 test reminder time and reported that the scheduled run had started. A refreshed Muse chat subsequently displayed the reminder-fired message.
 The earlier run-history panel had shown Queued, so its cached view was not used
-as final evidence. Exact Android push arrival and timing remain a separate
-user-observed acceptance check.
+as final evidence. The first Android push arrival was not independently timestamped. A second
+two-minute Drink water test on November 13 reached the OnePlus; the user
+reported approximately one to two minutes of lateness. Treat this route as
+best-effort Muse reminders, not exact-time alarms. The test does not isolate
+which stage of Muse scheduling, execution, or push delivery caused the delay.
 
 No native fork was needed for this POC. Before release, review the client's
 licensing/notices, package maintenance, macOS permission onboarding, and Android
