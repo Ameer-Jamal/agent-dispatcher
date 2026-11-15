@@ -1,8 +1,19 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, dirname } from "node:path";
+import { basename, join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { privateDir, type Agent } from "./config.js";
+
+// The macOS sandbox matches resolved paths (e.g. /var -> /private/var), so resolve the
+// nearest existing ancestor and keep any not-yet-created remainder.
+function resolvedPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    const parent = dirname(path);
+    return parent === path ? path : join(resolvedPath(parent), basename(path));
+  }
+}
 
 // Keep account/keychain authentication intact while hiding native extensions from workers.
 // Native CLI permission/sandbox controls are layered inside this configuration-only profile.
@@ -41,7 +52,7 @@ export function configurationProfile(
           : [];
   const writable =
     agent === "opencode"
-      ? `(deny file-write* (require-not (require-any ${[dirname(cwd), tmpdir(), "/private/tmp", "/dev", join(home, ".local/share/opencode"), join(home, ".local/state/opencode"), join(home, ".cache/opencode"), join(home, "Library/Caches/opencode")].map((p) => `(subpath ${JSON.stringify(p)})`).join(" ")})))\n`
+      ? `(deny file-write* (require-not (require-any ${[dirname(cwd), tmpdir(), "/private/tmp", "/dev", join(home, ".local/share/opencode"), join(home, ".local/state/opencode"), join(home, ".cache/opencode"), join(home, "Library/Caches/opencode")].map((p) => `(subpath ${JSON.stringify(resolvedPath(p))})`).join(" ")})))\n`
       : "";
   return `(version 1)\n(allow default)\n${writable}${agent === "cursor" ? `(deny file-write* (literal ${JSON.stringify(join(cwd, ".cursor/cli.json"))}))\n` : ""}${paths.map((p) => `(deny file-read-data (subpath ${JSON.stringify(p)}))`).join("\n")}\n`;
 }
