@@ -103,6 +103,52 @@ test("Cursor and Antigravity preserve native permissions and enable native sandb
   const settings = JSON.parse(agy.args[agy.args.indexOf("--settings") + 1]!);
   assert.equal(settings.useG1Credits, false);
   assert.equal(settings.modelProvider, "");
+  assert.ok(settings.permissions.allow.includes("command(npm test)"));
+  assert.ok(settings.permissions.allow.includes("command(git diff)"));
+  assert.ok(!settings.permissions.allow.includes("command(*)"));
+  assert.ok(settings.permissions.deny.includes("mcp(*)"));
+  assert.ok(settings.permissions.deny.includes("command(git push)"));
+  assert.equal(settings.enableTerminalSandbox, true);
+  assert.equal(settings.allowNonWorkspaceAccess, false);
+});
+test("Antigravity denied actions override a successful exit and response", () => {
+  for (const response of ["", "Finished the available work"]) {
+    const outcome = parseOutcome("antigravity", {
+      code: 0,
+      stdout: JSON.stringify({
+        status: "SUCCESS",
+        response,
+        conversation_id: "blocked-session",
+        denied_actions: [{ action: "command", display_name: "Bash" }],
+      }),
+      stderr: "",
+    });
+    assert.equal(outcome.kind, "permission");
+    assert.equal(outcome.sessionId, "blocked-session");
+    assert.ok(outcome.summary.length > 0);
+  }
+});
+test("Antigravity empty denied-actions list preserves successful outcomes", () => {
+  const outcome = parseOutcome("antigravity", {
+    code: 0,
+    stdout: JSON.stringify({
+      status: "SUCCESS",
+      response: "Done",
+      denied_actions: [],
+    }),
+    stderr: "",
+  });
+  assert.equal(outcome.kind, "success");
+});
+test("Antigravity permission denials do not trigger quota or availability fallback", () => {
+  for (const stderr of ["quota exceeded", "service unavailable"]) {
+    const outcome = parseOutcome("antigravity", {
+      code: 1,
+      stdout: JSON.stringify({ denied_actions: [{ action: "command" }] }),
+      stderr,
+    });
+    assert.equal(outcome.kind, "permission");
+  }
 });
 test("native result formats preserve worker sessions, summaries and usage", () => {
   assert.deepEqual(

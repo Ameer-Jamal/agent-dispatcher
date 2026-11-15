@@ -88,6 +88,44 @@ export function workerCommand(
         toolPermission: "proceed-in-sandbox",
         artifactReviewPolicy: "always-proceed",
         permissions: {
+          allow: [
+            ...[
+              "ls",
+              "pwd",
+              "cat",
+              "head",
+              "tail",
+              "wc",
+              "find",
+              "rg",
+              "grep",
+              "sed",
+              "awk",
+              "sort",
+              "cut",
+              "diff",
+              "mkdir",
+              "cp",
+              "mv",
+              "touch",
+              "node",
+              "python3",
+              "npm run",
+              "npm test",
+              "npm ci",
+              "npm install",
+              "npm audit",
+              "npm ls",
+              "npx",
+              "git status",
+              "git diff",
+              "git log",
+              "git show",
+              "git ls-files",
+              "git rev-parse",
+              "git blame",
+            ].map((command) => `command(${command})`),
+          ],
           deny: [
             "mcp(*)",
             "command(agent-dispatcher)",
@@ -95,6 +133,10 @@ export function workerCommand(
             "command(claude)",
             "command(opencode)",
             "command(agy)",
+            "command(agent)",
+            "command(git commit)",
+            "command(git push)",
+            "command(git merge)",
           ],
         },
       }),
@@ -165,6 +207,12 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
       modelError = true;
     if (Array.isArray(e.permission_denials) && e.permission_denials.length)
       permission = true;
+    if (
+      agent === "antigravity" &&
+      Array.isArray(e.denied_actions) &&
+      e.denied_actions.length > 0
+    )
+      permission = true;
     const item = e.item as { type?: string; text?: string } | undefined;
     if (item?.type === "agent_message") summary = item.text ?? summary;
     const u = e.usage as
@@ -200,6 +248,7 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
   let kind: Outcome["kind"] = "success";
   if (result.stopReason)
     kind = result.stopReason === "cancelled" ? "permission" : "failure";
+  else if (permission) kind = "permission";
   else if (result.code !== 0 || modelError) {
     if (/rate.?limit|quota|usage limit|limit reached/.test(evidence))
       kind = "quota";
@@ -213,12 +262,13 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
     else if (/permission|sandbox|not allowed|denied/.test(evidence))
       kind = "permission";
     else kind = "failure";
-  } else if (permission) kind = "permission";
+  }
   if (kind === "success" && (!summary || !events.length)) kind = "failure";
   return {
     sessionId,
     summary:
       summary.slice(0, 12000) ||
+      (permission ? "Worker blocked by native tool permissions" : "") ||
       `Worker ${kind}; ${result.stopReason ?? result.stderr.slice(0, 1000)}`,
     tokens,
     kind,
