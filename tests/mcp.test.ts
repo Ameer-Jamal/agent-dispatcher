@@ -90,7 +90,10 @@ test("Claude channel pushes to the originating connection once, then receipt is 
     f.store.update(task.id, { status: "running" });
     await runTask(f.store, f.config, task.id);
     assert.equal(f.store.get(task.id).agent, "codex");
-    await eventually(() => events.length === 1);
+    await eventually(
+      () =>
+        events.length === 1 && f.store.get(task.id).delivery === "delivered",
+    );
     assert.match(events[0]!, new RegExp(task.id));
     assert.equal(f.store.get(task.id).delivery, "delivered");
     await client.callTool({
