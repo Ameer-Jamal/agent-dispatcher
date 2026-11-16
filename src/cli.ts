@@ -7,7 +7,12 @@ import { sessionContext, recoverTasks } from "./coordinator.js";
 import { Store } from "./store.js";
 import { serve, view } from "./mcp.js";
 import { worker, runTask, submit, cancel, health } from "./dispatcher.js";
-import { availability, refreshUsage } from "./usage.js";
+import {
+  availability,
+  refreshUsage,
+  providerReadiness,
+  readinessNote,
+} from "./usage.js";
 import { applyPatch } from "./worktree.js";
 import { MuseRequests, museRequestSchema, museStatus } from "./muse.js";
 import {
@@ -148,6 +153,8 @@ async function main() {
             agents.map((a) => [a, config.agents[a].enabled]),
           ),
           subscriptions: await availability(config, store),
+          providers: providerReadiness(store, config),
+          readinessNote,
           ...Object.fromEntries(agents.map((a) => [a, store.usage(a)])),
           allowedRoots: config.allowedRoots,
           snooze: !!config.snooze,
@@ -182,6 +189,8 @@ async function main() {
             agents.map((a) => [a, config.agents[a].enabled]),
           ),
           ...Object.fromEntries(agents.map((a) => [a, store.usage(a)])),
+          providers: providerReadiness(store, config),
+          readinessNote,
           tasks: store.list(20).map(view),
         };
         break;

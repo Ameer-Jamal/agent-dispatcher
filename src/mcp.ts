@@ -9,6 +9,11 @@ import { z } from "zod";
 import { Store, terminal, type Task } from "./store.js";
 import { loadConfig, taskSchema, originSchema, agents } from "./config.js";
 import { submit, cancel, acknowledge, health } from "./dispatcher.js";
+import {
+  providerReadiness,
+  readinessNote,
+  subscriptionAuthenticated,
+} from "./usage.js";
 import { MuseRequests, museRequestSchema, museStatus } from "./muse.js";
 import {
   coordinatorInstructions,
@@ -89,7 +94,7 @@ export async function serve(state: string, channel = false) {
     list_tasks: "List compact task summaries without model polling.",
     cancel_task: "Cancel queued/running work; retain partial artifacts.",
     usage_status:
-      "Read cached allowance, freshness, authentication checks and worker health. Makes no inference calls.",
+      "Read cached allowance, freshness, authentication checks and worker health. workerHealthy is dispatcher service liveness only; providers[agent].ready is sign-in/cooldown readiness. Makes no inference calls.",
     muse_status:
       "Read Muse transport configuration readiness without sending. Supports a paired Mac Muse client or Linux Gadget CLI; configuration is not a connection check.",
     send_muse_request:
@@ -180,11 +185,9 @@ export async function serve(state: string, channel = false) {
               agents.map((a) => [a, loadConfig(state).agents[a].enabled]),
             ),
             ...Object.fromEntries(agents.map((a) => [a, store.usage(a)])),
-            subscriptionAuthenticated: {
-              ...Object.fromEntries(
-                agents.map((a) => [a, store.meta(`auth:${a}`) === "true"]),
-              ),
-            },
+            subscriptionAuthenticated: subscriptionAuthenticated(store),
+            providers: providerReadiness(store, loadConfig(state)),
+            readinessNote,
             reservePercent: loadConfig(state).reservePercent,
             claudeChannel: channel ? "connected" : "not enabled",
           };

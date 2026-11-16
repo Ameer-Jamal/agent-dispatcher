@@ -16,6 +16,7 @@ import {
 } from "./isolation.js";
 import type { Config, Agent, TaskInput } from "./config.js";
 import { run, subscriptionEnv, type RunResult } from "./process.js";
+import { classifyAuthError } from "./usage.js";
 export function workerCommand(
   agent: Agent,
   input: TaskInput,
@@ -166,6 +167,8 @@ export interface Outcome {
   summary: string;
   tokens?: number;
   kind: "success" | "quota" | "availability" | "permission" | "failure";
+  // Sanitized category when the provider rejected sign-in; kind stays "availability".
+  authFailure?: string;
 }
 export function parseOutcome(agent: Agent, result: RunResult): Outcome {
   const events: Record<string, unknown>[] = [];
@@ -181,9 +184,17 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
     tokens: number | undefined,
     permission = false,
     modelError = false;
+  const errorText: string[] = [];
   for (const e of events) {
     const error = e.error as
       { message?: string; data?: { message?: string } } | undefined;
+    for (const text of [
+      error?.message,
+      error?.data?.message,
+      e.type === "error" ? e.message : undefined,
+      e.is_error === true ? e.result : undefined,
+    ])
+      if (typeof text === "string") errorText.push(text);
     if (typeof error?.message === "string") summary = error.message;
     else if (typeof error?.data?.message === "string")
       summary = error.data.message;
@@ -246,11 +257,17 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
     (modelError || result.code !== 0 ? result.stdout : "")
   ).toLowerCase();
   let kind: Outcome["kind"] = "success";
+  let authFailure: string | undefined;
   if (result.stopReason)
     kind = result.stopReason === "cancelled" ? "permission" : "failure";
   else if (permission) kind = "permission";
   else if (result.code !== 0 || modelError) {
-    if (/rate.?limit|quota|usage limit|limit reached/.test(evidence))
+    // Only provider errors count: task output may legitimately mention 401s.
+    authFailure = classifyAuthError(
+      result.stderr + "\n" + errorText.join("\n"),
+    );
+    if (authFailure) kind = "availability";
+    else if (/rate.?limit|quota|usage limit|limit reached/.test(evidence))
       kind = "quota";
     else if (
       result.code === 127 ||
@@ -272,6 +289,7 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
       `Worker ${kind}; ${result.stopReason ?? result.stderr.slice(0, 1000)}`,
     tokens,
     kind,
+    ...(authFailure ? { authFailure } : {}),
   };
 }
 export async function execute(

@@ -18,8 +18,15 @@ import {
   type Config,
   type TaskInput,
   type Agent,
+  agents,
 } from "./config.js";
-import { refreshUsage, availability } from "./usage.js";
+import {
+  refreshUsage,
+  availability,
+  authRejection,
+  rejectAuth,
+  loginNeeded,
+} from "./usage.js";
 import { route } from "./routing.js";
 import { validateCwd, snapshot, capturePatch } from "./worktree.js";
 import { execute } from "./adapters.js";
@@ -200,6 +207,14 @@ export async function runTask(store: Store, config: Config, id: string) {
         { mode: 0o600 },
       );
       store.update(id, { workerSessionId: outcome.sessionId });
+      // Invalidate before any later refresh or rerouting can reuse cached readiness.
+      if (outcome.authFailure)
+        recordWorkerAuthFailure(
+          store,
+          config,
+          selection.agent,
+          outcome.authFailure,
+        );
       await capturePatch(tree.worktree, tree.baseCommit, tree.artifactDir);
       if (outcome.tokens !== undefined) {
         const u = store.usage(selection.agent);
@@ -252,16 +267,28 @@ export async function runTask(store: Store, config: Config, id: string) {
         }
       }
       finish(store, id, {
-        status: outcome.kind === "permission" ? "blocked" : "failed",
-        summary: outcome.summary,
-        error: `Worker ${outcome.kind}; see attempt artifact`,
+        status:
+          outcome.kind === "permission" || outcome.authFailure
+            ? "blocked"
+            : "failed",
+        summary: outcome.authFailure
+          ? loginNeeded(selection.agent, outcome.authFailure)
+          : outcome.summary,
+        error: outcome.authFailure
+          ? `${loginNeeded(selection.agent, outcome.authFailure)} No work was retried; see attempt artifact`
+          : `Worker ${outcome.kind}; see attempt artifact`,
       });
       return;
     }
   } catch (e) {
+    const prefer = store.get(id).input.prefer;
+    const actions = (prefer ? [prefer] : agents)
+      .filter((a) => config.agents[a].enabled)
+      .map((a) => authRejection(store, a)?.action)
+      .filter((a): a is string => !!a);
     finish(store, id, {
       status: "blocked",
-      error: String(e),
+      error: [String(e), ...actions].join(" "),
       summary: "Task could not safely continue; no automatic retry",
     });
   } finally {
@@ -279,6 +306,30 @@ export async function runTask(store: Store, config: Config, id: string) {
     process.removeListener("SIGTERM", stop);
     process.removeListener("SIGINT", stop);
   }
+}
+export function recordWorkerAuthFailure(
+  store: Store,
+  config: Config,
+  agent: Agent,
+  reason: string,
+) {
+  if (agent === "codex") {
+    // Persist until a fresh successful remote check; local login status cannot clear it.
+    rejectAuth(store, agent, reason, "worker");
+    store.setMeta("authCheck:codex", "rejected");
+    return;
+  }
+  // Other providers lack a remote check that could clear a rejection, so cool down instead.
+  const previous = store.usage(agent);
+  store.setUsage({
+    ...previous,
+    agent,
+    pool: config.agents[agent].pool,
+    quality: previous?.quality ?? "unknown",
+    observedAt: previous?.observedAt ?? Date.now(),
+    blockedUntil: Date.now() + 30 * 60000,
+    note: loginNeeded(agent, reason),
+  });
 }
 export async function tick(store: Store, config: Config) {
   store.setMeta("heartbeat", String(Date.now()));
