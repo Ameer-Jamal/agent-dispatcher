@@ -66,9 +66,117 @@ export function parseLimits(value: unknown, pool: string): Usage {
     })),
   };
 }
+const loginCommands: Record<Agent, string> = {
+  codex: "codex login",
+  claude: "claude auth login",
+  cursor: "agent login",
+  antigravity: "agy (interactive sign-in)",
+  opencode: "opencode auth login (opencode-go)",
+};
+// Sanitized categories only: raw provider messages may carry account or token details.
+export function classifyAuthError(text: string): string | undefined {
+  if (
+    /(?:refresh[ _-]?token|access token)[^\n]{0,80}(?:expired|revoked|invalid)|(?:expired|revoked|invalid)[ _-]?(?:refresh[ _-]?)?token|invalid_grant/i.test(
+      text,
+    )
+  )
+    return "refresh token expired or invalid";
+  if (/\b401\b|unauthori[sz]ed/i.test(text))
+    return "provider rejected credentials (401 unauthorized)";
+  if (
+    /not logged in|login required|sign in again|log ?in again|authentication (failed|required)|not authenticated/i.test(
+      text,
+    )
+  )
+    return "provider reports sign-in required";
+  return undefined;
+}
+export function loginNeeded(agent: Agent, reason: string) {
+  return `${agent} sign-in needed: ${reason}. Run \`${loginCommands[agent]}\` in your own terminal, then \`agent-dispatcher doctor\`; the dispatcher never performs login.`;
+}
+export interface AuthRejection {
+  at: number;
+  reason: string;
+  source: "remote-check" | "worker";
+  action: string;
+}
+// A definitive rejection persists until a fresh successful remote check; local saved credentials cannot clear it.
+export function authRejection(
+  store: Store,
+  agent: Agent,
+): AuthRejection | undefined {
+  const raw = store.meta(`authRejected:${agent}`);
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as AuthRejection;
+  } catch {
+    return {
+      at: 0,
+      reason: "unreadable rejection record",
+      source: "worker",
+      action: loginNeeded(agent, "unreadable rejection record"),
+    };
+  }
+}
+export function rejectAuth(
+  store: Store,
+  agent: Agent,
+  reason: string,
+  source: AuthRejection["source"],
+) {
+  const rejection: AuthRejection = {
+    at: Date.now(),
+    reason,
+    source,
+    action: loginNeeded(agent, reason),
+  };
+  store.setMeta(`authRejected:${agent}`, JSON.stringify(rejection));
+  store.setMeta(`auth:${agent}`, "false");
+  return rejection;
+}
+export function providerReadiness(store: Store, config: Config) {
+  const now = Date.now();
+  return Object.fromEntries(
+    agents.map((a) => {
+      const enabled = config.agents[a].enabled;
+      const rejection = authRejection(store, a);
+      const signedIn = store.meta(`auth:${a}`) === "true" && !rejection;
+      const blockedUntil = store.usage(a)?.blockedUntil;
+      const cooling = !!blockedUntil && blockedUntil > now;
+      const auth = !enabled
+        ? "disabled"
+        : rejection
+          ? "rejected"
+          : !signedIn
+            ? "unavailable"
+            : a === "codex" && store.meta("authCheck:codex") === "verified"
+              ? "remote-verified"
+              : "local-only";
+      return [
+        a,
+        {
+          ready: enabled && signedIn && !cooling,
+          auth,
+          ...(cooling ? { cooldownUntil: blockedUntil } : {}),
+          ...(rejection ? { action: rejection.action } : {}),
+        },
+      ];
+    }),
+  );
+}
+export function subscriptionAuthenticated(store: Store) {
+  return Object.fromEntries(
+    agents.map((a) => [
+      a,
+      store.meta(`auth:${a}`) === "true" && !authRejection(store, a),
+    ]),
+  ) as Record<Agent, boolean>;
+}
+export const readinessNote =
+  "workerHealthy is dispatcher service liveness only; providers[agent].ready reflects sign-in and cooldown. Neither proves a model began work.";
 export async function codexAccount(
   config: Config,
-): Promise<{ subscription: boolean; limits: unknown }> {
+): Promise<{ subscription: boolean; limits: unknown; limitsError?: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       config.agents.codex.command,
@@ -91,7 +199,7 @@ export async function codexAccount(
     >();
     const finish = (
       e?: Error,
-      result?: { subscription: boolean; limits: unknown },
+      result?: { subscription: boolean; limits: unknown; limitsError?: string },
     ) => {
       if (finished) return;
       finished = true;
@@ -159,10 +267,14 @@ export async function codexAccount(
           refreshToken: false,
         })) as { account?: { type?: string } | null };
         const subscription = account.account?.type === "chatgpt";
+        let limitsError: string | undefined;
         const limits = subscription
-          ? await rpc("account/rateLimits/read").catch(() => undefined)
+          ? await rpc("account/rateLimits/read").catch((e: Error) => {
+              limitsError = e.message;
+              return undefined;
+            })
           : undefined;
-        finish(undefined, { subscription, limits });
+        finish(undefined, { subscription, limits, limitsError });
       } catch (e) {
         finish(e instanceof Error ? e : new Error(String(e)));
       }
@@ -183,22 +295,56 @@ export async function refreshUsage(
   let authVerified = false;
   try {
     const result = await codexAccount(config);
-    authVerified = result.subscription;
-    store.setMeta("auth:codex", String(result.subscription));
-    if (!result.subscription)
-      throw new Error("Codex is not authenticated with ChatGPT");
+    if (!result.subscription) {
+      const rejection = rejectAuth(
+        store,
+        "codex",
+        "not signed in with ChatGPT",
+        "remote-check",
+      );
+      store.setMeta("authCheck:codex", "rejected");
+      throw new Error(rejection.action);
+    }
+    if (result.limitsError !== undefined) {
+      const reason = classifyAuthError(result.limitsError);
+      if (reason) {
+        store.setMeta("authCheck:codex", "rejected");
+        throw new Error(
+          rejectAuth(store, "codex", reason, "remote-check").action,
+        );
+      }
+      throw new Error(`Codex allowance read failed: ${result.limitsError}`);
+    }
+    // Only a successful remote allowance read proves the saved credentials still work.
+    const limits = parseLimits(result.limits, config.agents.codex.pool);
+    authVerified = true;
+    store.setMeta("auth:codex", "true");
+    store.setMeta("authCheck:codex", "verified");
+    store.setMeta("authRejected:codex", "");
     store.setUsage({
       ...store.usage("codex"),
-      ...parseLimits(result.limits, config.agents.codex.pool),
+      ...limits,
     });
   } catch (e) {
-    if (!authVerified) store.setMeta("auth:codex", "false");
+    const message = e instanceof Error ? e.message : String(e);
+    if (!authVerified && !authRejection(store, "codex")) {
+      const reason = classifyAuthError(message);
+      if (reason) {
+        store.setMeta("authCheck:codex", "rejected");
+        rejectAuth(store, "codex", reason, "remote-check");
+      } else {
+        // Transient/unknown: no definitive answer, so local login status may still decide.
+        store.setMeta("authCheck:codex", "unverified");
+        store.setMeta("auth:codex", "false");
+      }
+    }
+    const rejection = authRejection(store, "codex");
     store.setUsage({
       agent: "codex",
       pool: config.agents.codex.pool,
       quality: "unknown",
       observedAt: Date.now(),
-      note: String(e),
+      note: rejection && !authVerified ? rejection.action : message,
     });
   }
 }
@@ -230,7 +376,9 @@ export async function availability(
       observedAt: Date.now(),
       note: "No supported remaining-allowance API; subscription authentication checked separately",
     });
-  if (store.meta("auth:codex") !== "true") {
+  // Saved local credentials say nothing about a definitive remote rejection.
+  if (authRejection(store, "codex")) store.setMeta("auth:codex", "false");
+  else if (store.meta("auth:codex") !== "true") {
     const local = await run(config.agents.codex.command, ["login", "status"], {
       env: subscriptionEnv(),
       cwd: homedir(),

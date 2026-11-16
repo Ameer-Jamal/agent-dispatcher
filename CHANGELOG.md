@@ -2,6 +2,8 @@
 
 ## 0.1.0-alpha.2 — Unreleased
 
+- Persist definitive Codex sign-in rejections (expired/invalid refresh token, 401 unauthorized) separately from transient errors; local login status cannot clear them, a fresh successful remote check can. Worker auth failures invalidate readiness and return a sanitized login action.
+- Report provider readiness separately from dispatcher service liveness in `usage_status`, `status` and `doctor`.
 - Allow OpenCode development commands unattended inside its OS write sandbox and give package managers private task-local caches.
 - Verify offline dependency installation, lifecycle scripts and tests through a real OpenCode Go worker.
 
