@@ -22,6 +22,7 @@ export function workerCommand(
   input: TaskInput,
   config: Config,
   sessionId: string,
+  cwd?: string,
 ) {
   const model = input.model ?? config.agents[agent].model;
   let args =
@@ -90,6 +91,8 @@ export function workerCommand(
         artifactReviewPolicy: "always-proceed",
         permissions: {
           allow: [
+            // Native file access is separate from command permissions in headless mode.
+            ...(cwd ? [`read_file(${cwd})`, `write_file(${cwd})`] : []),
             ...[
               "ls",
               "pwd",
@@ -302,7 +305,7 @@ export async function execute(
   artifactDir?: string,
 ) {
   const sessionId = randomUUID();
-  const native = workerCommand(agent, input, config, sessionId);
+  const native = workerCommand(agent, input, config, sessionId, cwd);
   const env = subscriptionEnv();
   let restore = () => {};
   if (agent === "cursor") {

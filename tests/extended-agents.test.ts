@@ -111,6 +111,41 @@ test("Cursor and Antigravity preserve native permissions and enable native sandb
   assert.equal(settings.enableTerminalSandbox, true);
   assert.equal(settings.allowNonWorkspaceAccess, false);
 });
+test("Antigravity native file access is scoped to the isolated checkout", () => {
+  const workspace = "/private/tmp/worker checkout";
+  const command = workerCommand(
+    "antigravity",
+    input,
+    config,
+    randomUUID(),
+    workspace,
+  );
+  const settings = JSON.parse(
+    command.args[command.args.indexOf("--settings") + 1]!,
+  );
+  assert.deepEqual(
+    settings.permissions.allow.filter((rule: string) =>
+      /^(read_file|write_file)\(/.test(rule),
+    ),
+    [`read_file(${workspace})`, `write_file(${workspace})`],
+  );
+  assert.ok(!settings.permissions.allow.includes(`read_file(${input.cwd})`));
+  assert.equal(settings.allowNonWorkspaceAccess, false);
+  assert.equal(settings.enableTerminalSandbox, true);
+  assert.ok(settings.permissions.deny.includes("mcp(*)"));
+  assert.ok(settings.permissions.deny.includes("command(git push)"));
+});
+test("Antigravity emits no native file grants without a worker checkout", () => {
+  const command = workerCommand("antigravity", input, config, randomUUID());
+  const settings = JSON.parse(
+    command.args[command.args.indexOf("--settings") + 1]!,
+  );
+  assert.ok(
+    !settings.permissions.allow.some((rule: string) =>
+      /^(read_file|write_file)\(/.test(rule),
+    ),
+  );
+});
 test("Antigravity denied actions override a successful exit and response", () => {
   for (const response of ["", "Finished the available work"]) {
     const outcome = parseOutcome("antigravity", {

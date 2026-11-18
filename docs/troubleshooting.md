@@ -23,3 +23,5 @@
 - **SQLite warning:** Node 22 may mark its built-in SQLite API experimental. Warnings go to stderr, not the MCP stdout transport.
 
 Keep the Mac awake and logged in for unattended local work. No tool here wakes a sleeping computer. Results are private local files, not encrypted storage. Remove retained worktrees deliberately after review.
+
+- **Antigravity native `read_file` denied:** update the dispatcher and restart its service. Native file access is separate from terminal command grants. Workers now receive `read_file(<isolated checkout>)` and `write_file(<isolated checkout>)` grants; native sandboxing, workspace boundaries and existing deny rules remain enabled.
