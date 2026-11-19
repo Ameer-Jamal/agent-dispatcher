@@ -125,6 +125,25 @@ export async function capturePatch(
     rmSync(temp, { recursive: true, force: true });
   }
 }
+export async function reviewCheckoutUnchanged(
+  worktree: string,
+  baseCommit: string,
+) {
+  try {
+    if ((await git(worktree, ["rev-parse", "HEAD"])) !== baseCommit)
+      return false;
+    const entries = await git(worktree, ["ls-files", "-v"]);
+    if (/^(?:S|[a-z]) /m.test(entries)) return false;
+    return !(await git(worktree, [
+      "status",
+      "--porcelain",
+      "--ignored",
+      "--untracked-files=all",
+    ]));
+  } catch {
+    return false;
+  }
+}
 export async function applyPatch(task: {
   input: TaskInput;
   artifactDir?: string;

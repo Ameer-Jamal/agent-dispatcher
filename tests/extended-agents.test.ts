@@ -168,7 +168,7 @@ test("Antigravity empty denied-actions list preserves successful outcomes", () =
     code: 0,
     stdout: JSON.stringify({
       status: "SUCCESS",
-      response: "Done",
+      response: "Done\nDISPATCHER_STATUS: completed",
       denied_actions: [],
     }),
     stderr: "",
@@ -192,7 +192,7 @@ test("native result formats preserve worker sessions, summaries and usage", () =
       stdout: JSON.stringify({
         type: "result",
         session_id: "cursor-session",
-        result: "Done",
+        result: "Done\nDISPATCHER_STATUS: completed",
         usage: { input_tokens: 5, output_tokens: 2 },
       }),
       stderr: "",
@@ -209,7 +209,7 @@ test("native result formats preserve worker sessions, summaries and usage", () =
     stdout: JSON.stringify({
       status: "SUCCESS",
       conversation_id: "agy-session",
-      response: "Done",
+      response: "Done\nDISPATCHER_STATUS: completed",
       usage: { total_tokens: 9 },
     }),
     stderr: "",
@@ -220,7 +220,11 @@ test("native result formats preserve worker sessions, summaries and usage", () =
   const oc = parseOutcome("opencode", {
     code: 0,
     stdout: [
-      { type: "text", sessionID: "ses_fixture", part: { text: "Done" } },
+      {
+        type: "text",
+        sessionID: "ses_fixture",
+        part: { text: "Done\nDISPATCHER_STATUS: completed" },
+      },
       {
         type: "step_finish",
         sessionID: "ses_fixture",

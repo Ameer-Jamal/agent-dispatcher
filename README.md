@@ -94,7 +94,7 @@ This enables Claude Code's custom development channel; it does not bypass permis
 - **Report uncertainty:** Codex and Antigravity provide measured windows. Claude, OpenCode Go and Cursor remaining balances are unknown unless estimated. Status includes observation/reset times where available and observed quota cooldowns.
 - **Run development work unattended:** OpenCode allows development shell commands, including installs and tests, with task-local package caches inside its OS write sandbox. Other workers use their native sandbox settings. OS or remaining policy denials return a blocked result. There is no unrestricted YOLO mode or relay for approving a worker prompt from another chat.
 - **Supply external context:** workers have empty/isolated MCP configuration. The coordinator retrieves Jira tickets or other connected context and includes what the worker needs.
-- **Recover safely:** one classified quota/availability failure permits a fallback. Other failures and uncertain execution require coordinator assessment. Notification delivery is distinct from confirmed receipt.
+- **Recover safely:** one classified quota/availability failure permits a fallback. A provider-reported tool denial also permits one fallback for an automatically routed, read-only review with an unchanged checkout. For other permission blocks, the coordinator uses tools available in the originating session to continue where authorized. Notification delivery is distinct from confirmed receipt.
 
 See [workflows and boundaries](docs/workflows.md) for remote coding examples, iterative delegation and the limits of computer control.
 

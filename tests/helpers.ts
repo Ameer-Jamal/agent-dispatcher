@@ -44,9 +44,16 @@ if(args[0]==='app-server'){
  const codex=args[0]==='exec';
  if(mode==='quota'&&!codex){console.log(JSON.stringify({is_error:true,result:'Usage limit reached'}));process.exitCode=1;return;}
  if(mode==='permission'){console.log(JSON.stringify({result:'Cannot write',permission_denials:[{tool_name:'Write'}]}));return;}
+ if(mode.startsWith('review-permission')){
+   if(!codex && mode==='review-permission-dirty')fs.writeFileSync('partial.txt','partial\\n');
+   if(!codex || mode==='review-permission-twice'){
+     console.log(JSON.stringify({result:'Bash denied',permission_denials:[{tool_name:'Bash'}]}));return;
+   }
+   console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Reviewed. No findings.\\nDISPATCHER_STATUS: completed'}}));return;
+ }
  fs.writeFileSync('worker.txt','worker output\\n');
- if(codex){console.log(JSON.stringify({type:'thread.started',thread_id:'00000000-0000-4000-8000-000000000001'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Implemented worker.txt. File content checked.'}}));}
- else console.log(JSON.stringify({result:'Implemented worker.txt. File content checked.',session_id:'00000000-0000-4000-8000-000000000002',usage:{input_tokens:4,output_tokens:5}}));
+ if(codex){console.log(JSON.stringify({type:'thread.started',thread_id:'00000000-0000-4000-8000-000000000001'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Implemented worker.txt. File content checked.\\nDISPATCHER_STATUS: completed'}}));}
+ else console.log(JSON.stringify({result:'Implemented worker.txt. File content checked.\\nDISPATCHER_STATUS: completed',session_id:'00000000-0000-4000-8000-000000000002',usage:{input_tokens:4,output_tokens:5}}));
  });
 }
 `,

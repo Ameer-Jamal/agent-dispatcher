@@ -42,8 +42,8 @@ if(args[0]==='app-server'){
  process.stdin.resume();process.stdin.on('end',()=>{
  if(args[0]==='exec'&&c.execError){console.error(c.execError);console.log(JSON.stringify({type:'turn.failed',error:{message:c.execError}}));process.exitCode=1;return;}
  fs.writeFileSync('worker.txt','worker output\\n');
- if(args[0]==='exec'){console.log(JSON.stringify({type:'thread.started',thread_id:'00000000-0000-4000-8000-000000000001'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Done.'}}));}
- else console.log(JSON.stringify({result:'Done.',session_id:'00000000-0000-4000-8000-000000000002'}));
+ if(args[0]==='exec'){console.log(JSON.stringify({type:'thread.started',thread_id:'00000000-0000-4000-8000-000000000001'}));console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Done.\\nDISPATCHER_STATUS: completed'}}));}
+ else console.log(JSON.stringify({result:'Done.\\nDISPATCHER_STATUS: completed',session_id:'00000000-0000-4000-8000-000000000002'}));
  });
 }
 `,

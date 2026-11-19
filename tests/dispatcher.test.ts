@@ -77,6 +77,69 @@ test("permission denials surface as blocked without fallback", async () => {
     f.cleanup();
   }
 });
+test("exit-zero worker requires explicit completion evidence", () => {
+  const claude = (result: string) =>
+    parseOutcome("claude", {
+      code: 0,
+      stdout: JSON.stringify({ result }),
+      stderr: "",
+    });
+  const blocked = "I couldn't fix this: the sandbox denied GitHub and npm.";
+  assert.equal(claude(blocked).kind, "permission");
+  assert.equal(
+    claude(`${blocked}\nDISPATCHER_STATUS: blocked_permission`).kind,
+    "permission",
+  );
+  assert.equal(claude("Unable to finish the required checks.").kind, "failure");
+  assert.equal(
+    claude("Some checks ran.\nDISPATCHER_STATUS: incomplete").kind,
+    "failure",
+  );
+  const completed = claude(
+    "Reviewed permission handling.\nDISPATCHER_STATUS: completed",
+  );
+  assert.equal(completed.kind, "success");
+  assert.equal(completed.summary, "Reviewed permission handling.");
+});
+test("only an unchanged, unpinned review can retry a native tool denial once", async () => {
+  for (const { mode, prefer, attempts, status } of [
+    { mode: "review-permission", attempts: 2, status: "completed" },
+    { mode: "review-permission-twice", attempts: 2, status: "blocked" },
+    { mode: "review-permission-dirty", attempts: 1, status: "blocked" },
+    {
+      mode: "review-permission",
+      prefer: "claude" as const,
+      attempts: 1,
+      status: "blocked",
+    },
+  ]) {
+    const f = fixture(mode);
+    try {
+      const task = submit(f.store, f.config, {
+        ...f.input,
+        goal: "Review tracked.txt",
+        taskType: "review",
+        prefer,
+      });
+      f.store.update(task.id, { status: "running" });
+      await runTask(f.store, f.config, task.id);
+      const done = f.store.get(task.id);
+      assert.equal(done.attempts, attempts, mode);
+      assert.equal(done.status, status, mode);
+      const first = JSON.parse(
+        readFileSync(join(done.artifactDir!, "attempt-1.json"), "utf8"),
+      );
+      assert.equal(first.outcome.nativePermission, true);
+      if (mode === "review-permission-dirty")
+        assert.match(
+          readFileSync(join(done.artifactDir!, "changes.patch"), "utf8"),
+          /partial/,
+        );
+    } finally {
+      f.cleanup();
+    }
+  }
+});
 test("Snooze registration is single-shot, watches terminal artifact, and distinguishes queue from acknowledgement", async () => {
   const f = fixture();
   try {

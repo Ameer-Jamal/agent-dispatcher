@@ -28,7 +28,12 @@ import {
   loginNeeded,
 } from "./usage.js";
 import { route } from "./routing.js";
-import { validateCwd, snapshot, capturePatch } from "./worktree.js";
+import {
+  validateCwd,
+  snapshot,
+  capturePatch,
+  reviewCheckoutUnchanged,
+} from "./worktree.js";
 import { execute } from "./adapters.js";
 import { identity, sameProcess, run } from "./process.js";
 export const entry = fileURLToPath(new URL("./cli.js", import.meta.url));
@@ -243,12 +248,20 @@ export async function runTask(store: Store, config: Config, id: string) {
           note: "Observed quota failure; cooldown until measured reset or 30 minutes",
         });
       }
+      const retryReview =
+        attempt === 1 &&
+        !task.input.prefer &&
+        task.input.taskType === "review" &&
+        outcome.kind === "permission" &&
+        outcome.nativePermission &&
+        (await reviewCheckoutUnchanged(tree.worktree, tree.baseCommit));
       if (
         attempt === 1 &&
         !task.input.prefer &&
-        ["quota", "availability"].includes(outcome.kind)
+        (retryReview || ["quota", "availability"].includes(outcome.kind))
       ) {
         try {
+          const previous = selection.agent;
           selection = route(
             task.input,
             config,
@@ -261,6 +274,8 @@ export async function runTask(store: Store, config: Config, id: string) {
             await availability(config, store),
             used,
           );
+          if (retryReview)
+            selection.reason += `; retrying read-only review after ${previous} tool denial`;
           continue;
         } catch {
           /* return original worker failure */
@@ -276,7 +291,9 @@ export async function runTask(store: Store, config: Config, id: string) {
           : outcome.summary,
         error: outcome.authFailure
           ? `${loginNeeded(selection.agent, outcome.authFailure)} No work was retried; see attempt artifact`
-          : `Worker ${outcome.kind}; see attempt artifact`,
+          : outcome.kind === "permission"
+            ? "Worker permission denied; attempt artifacts retained. Inspect the denied operation and complete any authorized checks available in the originating session."
+            : `Worker ${outcome.kind}; see attempt artifact`,
       });
       return;
     }
