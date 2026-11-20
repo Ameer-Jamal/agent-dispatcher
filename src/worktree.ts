@@ -19,8 +19,13 @@ async function git(
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args],
     { cwd, env, input, timeoutMs: 60000, maxBytes: 20_000_000 },
   );
-  if (r.code !== 0 || r.stopReason)
-    throw new Error(`Git ${args[0]} failed: ${r.stderr.slice(0, 1000)}`);
+  if (r.code !== 0 || r.stopReason) {
+    const reason = r.stopReason ?? `exit ${r.code}`;
+    const detail = r.stderr.trim().slice(0, 1000);
+    throw new Error(
+      `Git ${args[0]} failed (${reason})${detail ? `: ${detail}` : ""}`,
+    );
+  }
   return r.stdout.trim();
 }
 export function validateCwd(input: TaskInput, config: Config) {
@@ -68,7 +73,8 @@ export async function snapshot(state: string, id: string, input: TaskInput) {
   try {
     await git(root, ["read-tree", "HEAD"], env);
     await git(root, ["add", "-A", "--", "."], env);
-    const tree = await git(root, ["write-tree"], env);
+    // Sparse partial clones can retain promised blobs outside the worker checkout.
+    const tree = await git(root, ["write-tree", "--missing-ok"], env);
     const head = await git(root, ["rev-parse", "HEAD"]);
     baseCommit = await git(
       root,

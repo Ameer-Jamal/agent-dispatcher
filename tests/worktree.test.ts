@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { fixture } from "./helpers.js";
 import {
   snapshot,
@@ -60,6 +62,49 @@ test("conflicting source edits are preserved", async () => {
       }),
     );
     assert.equal(f.read("tracked.txt"), "user change\n");
+  } finally {
+    f.cleanup();
+  }
+});
+test("a sparse partial clone snapshots without fetching excluded blobs", async () => {
+  const f = fixture();
+  try {
+    for (const folder of ["included", "excluded"]) {
+      mkdirSync(join(f.repo, folder));
+      writeFileSync(join(f.repo, folder, "content.txt"), folder);
+    }
+    f.git("add", "--", "included", "excluded");
+    f.git("commit", "-m", "Add fixture folders");
+    f.git("config", "uploadpack.allowFilter", "true");
+    const cwd = join(f.root, "sparse clone");
+    const git = (...args: string[]) =>
+      execFileSync("git", args, { cwd: f.root, encoding: "utf8" });
+    git(
+      "clone",
+      "--quiet",
+      "--filter=blob:none",
+      "--sparse",
+      pathToFileURL(f.repo).href,
+      cwd,
+    );
+    git("-C", cwd, "sparse-checkout", "set", "included");
+    assert.match(
+      git("-C", cwd, "rev-list", "--objects", "--all", "--missing=print"),
+      /^\?/m,
+    );
+    git("-C", cwd, "remote", "set-url", "origin", join(f.root, "offline"));
+    writeFileSync(join(cwd, "included", "content.txt"), "local edit");
+    const tree = await snapshot(f.state, "sparse", { ...f.input, cwd });
+    assert.equal(
+      readFileSync(join(tree.worktree, "included", "content.txt"), "utf8"),
+      "local edit",
+    );
+    assert.equal(existsSync(join(tree.worktree, "excluded")), false);
+    await capturePatch(tree.worktree, tree.baseCommit, tree.artifactDir);
+    assert.equal(
+      readFileSync(join(tree.artifactDir, "changes.patch"), "utf8"),
+      "",
+    );
   } finally {
     f.cleanup();
   }
