@@ -6,7 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { Store, terminal, type Task } from "./store.js";
+import { Store, terminal, deadlineAt, type Task } from "./store.js";
 import { loadConfig, taskSchema, originSchema, agents } from "./config.js";
 import { submit, cancel, acknowledge, health } from "./dispatcher.js";
 import {
@@ -35,6 +35,7 @@ export function view(task: Task) {
     artifacts: task.artifactDir,
     patch: task.artifactDir ? `${task.artifactDir}/changes.patch` : undefined,
     createdAt: task.createdAt,
+    deadlineAt: deadlineAt(task),
     updatedAt: task.updatedAt,
   };
 }
@@ -88,9 +89,9 @@ export async function serve(state: string, channel = false) {
     recover_tasks:
       "Recover active and unacknowledged work at startup, resume or compaction. Requires exact origin or cwd; makes no inference calls and does not acknowledge receipt.",
     dispatch_task:
-      "Persist a bounded task for subscription workers. Returns immediately; worker service must be running.",
+      "Persist a bounded task for subscription workers. Returns immediately; worker service must be running. Optional deadlineSeconds bounds queue wait plus all attempts; expiry ends the task as expired.",
     get_task:
-      "Read a terminal result and artifact paths. acknowledge:true confirms receipt in the matching origin session.",
+      "Read a terminal result and artifact paths. A terminal result is not success: check status (completed, failed, blocked, cancelled, interrupted or expired). acknowledge:true confirms receipt in the matching origin session.",
     list_tasks: "List compact task summaries without model polling.",
     cancel_task: "Cancel queued/running work; retain partial artifacts.",
     usage_status:

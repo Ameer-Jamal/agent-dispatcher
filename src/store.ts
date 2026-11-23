@@ -15,7 +15,8 @@ export type Status =
   | "failed"
   | "blocked"
   | "cancelled"
-  | "interrupted";
+  | "interrupted"
+  | "expired";
 export type Delivery =
   | "pending"
   | "inbox"
@@ -148,6 +149,30 @@ export class Store {
       throw e;
     }
   }
+  // Atomic compare-and-set so a concurrent cancel or expiry is never overwritten.
+  transition(
+    id: string,
+    allowed: (task: Task) => boolean,
+    patch: Partial<Task>,
+  ): Task | undefined {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = this.get(id);
+      if (!allowed(current)) {
+        this.db.exec("COMMIT");
+        return undefined;
+      }
+      const task = { ...current, ...patch, updatedAt: Date.now() };
+      this.db
+        .prepare("UPDATE tasks SET data=? WHERE id=?")
+        .run(JSON.stringify(task), id);
+      this.db.exec("COMMIT");
+      return task;
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+  }
   claimDelivery(id: string, allowed: Delivery[]): Task | undefined {
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -193,3 +218,12 @@ export class Store {
   }
 }
 export const terminal = (s: Status) => !["queued", "running"].includes(s);
+/** End-to-end deadline in Unix ms, measured from creation; undefined when the caller omitted one. */
+export const deadlineAt = (task: Task) =>
+  task.input.deadlineSeconds === undefined
+    ? undefined
+    : task.createdAt + task.input.deadlineSeconds * 1000;
+export const expired = (task: Task, now = Date.now()) => {
+  const at = deadlineAt(task);
+  return at !== undefined && now >= at;
+};

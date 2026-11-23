@@ -146,6 +146,28 @@ export const taskSchema = z
     prefer: Agent.optional(),
     model: z.string().min(1).max(200).optional(),
     capabilityReason: z.string().min(1).max(1000).optional(),
+    requiredAccess: z
+      .array(
+        z.enum([
+          "connected_tools",
+          "external_credentials",
+          "interactive_approval",
+        ]),
+      )
+      .max(3)
+      .optional()
+      .describe(
+        "Access required to complete the worker task. Declare connected tools, external credentials or interactive approval when essential. These cannot run in a headless worker and are rejected before queueing. Leave them out of a separate local-only task.",
+      ),
+    deadlineSeconds: z
+      .number()
+      .int()
+      .min(60)
+      .max(86400)
+      .optional()
+      .describe(
+        "Optional end-to-end deadline measured from submission, covering queue wait and every attempt. A task still queued at the deadline ends as expired without starting; a running attempt is clamped to the remaining time. Omit for no end-to-end deadline (each attempt keeps the configured timeoutSeconds).",
+      ),
     origin: originSchema.optional(),
     idempotencyKey: z.string().min(1).max(200),
   })

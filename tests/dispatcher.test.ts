@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { fixture, eventually } from "./helpers.js";
@@ -12,10 +12,33 @@ import {
   cancel,
   tick,
   acknowledge,
+  finish,
 } from "../src/dispatcher.js";
+import { identity } from "../src/process.js";
 import { workerCommand, parseOutcome } from "../src/adapters.js";
 import { subscriptionEnv } from "../src/process.js";
 import { randomUUID } from "node:crypto";
+test("preflight rejects required access before queueing a worker", () => {
+  const f = fixture();
+  try {
+    assert.throws(
+      () =>
+        submit(f.store, f.config, {
+          ...f.input,
+          requiredAccess: [
+            "connected_tools",
+            "external_credentials",
+            "interactive_approval",
+          ],
+        }),
+      /before queueing.*connected tools.*authorized account access.*specific permission request/,
+    );
+    assert.equal(f.store.all().length, 0);
+    assert.equal(submit(f.store, f.config, f.input).status, "queued");
+  } finally {
+    f.cleanup();
+  }
+});
 test("idempotency survives restart and rejects a different payload", () => {
   const f = fixture();
   try {
@@ -294,6 +317,177 @@ test("pre-taskType idempotency records survive a configuration upgrade", () => {
       .run(JSON.stringify(old), task.id);
     assert.equal(submit(f.store, f.config, f.input).id, task.id);
   } finally {
+    f.cleanup();
+  }
+});
+
+const backdate = (f: ReturnType<typeof fixture>, id: string, seconds: number) =>
+  f.store.update(id, { createdAt: Date.now() - seconds * 1000 });
+const scheduled = (root: string) =>
+  existsSync(join(root, "calls.jsonl"))
+    ? readFileSync(join(root, "calls.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .filter((line) => JSON.parse(line)[0] === "add").length
+    : 0;
+test("queued task expires behind a live runner with single, idempotent result and delivery", async () => {
+  const f = fixture();
+  try {
+    const live = submit(f.store, f.config, f.input);
+    f.store.update(live.id, {
+      status: "running",
+      runnerPid: process.pid,
+      runnerIdentity: identity(process.pid),
+    });
+    const origin = { client: "codex" as const, sessionId: randomUUID() };
+    const late = submit(f.store, f.config, {
+      ...f.input,
+      idempotencyKey: "late",
+      taskType: "investigation",
+      deadlineSeconds: 60,
+      origin,
+    });
+    backdate(f, late.id, 61);
+    await tick(f.store, f.config);
+    const done = f.store.get(late.id);
+    assert.equal(done.status, "expired");
+    assert.equal(done.attempts, 0);
+    assert.equal(done.runnerPid, undefined);
+    assert.match(done.error!, /No work was attempted/);
+    assert.equal(done.snoozeJobId, "snooze-fixture");
+    assert.equal(f.store.get(live.id).status, "running");
+    const spec = JSON.parse(
+      readFileSync(join(f.root, "schedule.json"), "utf8"),
+    );
+    assert.equal(spec.path, join(f.state, "tasks", late.id, "result.json"));
+    assert.match(spec.title, /result ready/);
+    assert.match(spec.instruction, /not that the task succeeded/);
+    const result = readFileSync(spec.path, "utf8");
+    assert.equal(JSON.parse(result).status, "expired");
+    await tick(f.store, f.config);
+    assert.equal(cancel(f.store, late.id).status, "expired");
+    assert.equal(
+      finish(f.store, late.id, { status: "completed" }).status,
+      "expired",
+    );
+    assert.equal(scheduled(f.root), 1);
+    assert.equal(JSON.parse(readFileSync(spec.path, "utf8")).status, "expired");
+    assert.equal(
+      submit(f.store, f.config, {
+        ...f.input,
+        idempotencyKey: "late",
+        taskType: "investigation",
+        deadlineSeconds: 60,
+        origin,
+      }).id,
+      late.id,
+    );
+  } finally {
+    f.cleanup();
+  }
+});
+test("tasks without deadlineSeconds keep unbounded queue wait and old idempotency", async () => {
+  const f = fixture();
+  try {
+    const live = submit(f.store, f.config, f.input);
+    f.store.update(live.id, {
+      status: "running",
+      runnerPid: process.pid,
+      runnerIdentity: identity(process.pid),
+    });
+    const waiting = submit(f.store, f.config, {
+      ...f.input,
+      idempotencyKey: "waiting",
+    });
+    assert.equal("deadlineSeconds" in waiting.input, false);
+    backdate(f, waiting.id, 86400 * 2);
+    await tick(f.store, { ...f.config, snooze: undefined });
+    assert.equal(f.store.get(waiting.id).status, "queued");
+    assert.equal(
+      submit(f.store, f.config, { ...f.input, idempotencyKey: "waiting" }).id,
+      waiting.id,
+    );
+  } finally {
+    f.cleanup();
+  }
+});
+test("cancel or expiry during async delivery registration prevents a late start", async () => {
+  for (const kind of ["cancel", "deadline"]) {
+    const f = fixture();
+    try {
+      const slow = join(f.root, "slow-snooze");
+      writeFileSync(slow, `#!/bin/sh\nsleep 1\nexec "${f.mock}" "$@"\n`, {
+        mode: 0o700,
+      });
+      const config = { ...f.config, snooze: { command: slow, args: [] } };
+      const task = submit(f.store, config, {
+        ...f.input,
+        origin: { client: "codex", sessionId: randomUUID() },
+        ...(kind === "deadline" ? { deadlineSeconds: 60 } : {}),
+      });
+      if (kind === "deadline")
+        f.store.update(task.id, { createdAt: Date.now() - 59500 });
+      const pending = tick(f.store, config);
+      if (kind === "cancel") {
+        await eventually(() => f.store.get(task.id).delivery === "sending");
+        cancel(f.store, task.id);
+      }
+      await pending;
+      const done = f.store.get(task.id);
+      assert.equal(done.status, kind === "cancel" ? "cancelled" : "expired");
+      assert.equal(done.runnerPid, undefined, kind);
+      assert.equal(done.snoozeJobId, "snooze-fixture", kind);
+      assert.equal(scheduled(f.root), 1, kind);
+    } finally {
+      f.cleanup();
+    }
+  }
+});
+test("running attempt is clamped to the remaining deadline and keeps artifacts", async () => {
+  const f = fixture("slow");
+  try {
+    const task = submit(f.store, f.config, { ...f.input, deadlineSeconds: 60 });
+    backdate(f, task.id, 55);
+    f.store.update(task.id, { status: "running" });
+    const started = Date.now();
+    await runTask(f.store, f.config, task.id);
+    assert.ok(Date.now() - started < 15000);
+    const done = f.store.get(task.id);
+    assert.equal(done.status, "expired");
+    assert.equal(done.attempts, 1);
+    assert.match(done.summary!, /during attempt 1/);
+    const attempt = JSON.parse(
+      readFileSync(join(done.artifactDir!, "attempt-1.json"), "utf8"),
+    );
+    assert.equal(attempt.stopReason, "timeout");
+    assert.equal(existsSync(join(done.artifactDir!, "changes.patch")), true);
+    assert.equal(
+      JSON.parse(
+        readFileSync(join(f.state, "tasks", task.id, "result.json"), "utf8"),
+      ).status,
+      "expired",
+    );
+  } finally {
+    f.cleanup();
+  }
+});
+test("service stops a runner that overruns its deadline through the cancellation path", async () => {
+  const f = fixture();
+  const runner = spawn("sleep", ["30"], { stdio: "ignore" });
+  try {
+    const task = submit(f.store, f.config, { ...f.input, deadlineSeconds: 60 });
+    backdate(f, task.id, 121);
+    f.store.update(task.id, {
+      status: "running",
+      runnerPid: runner.pid,
+      runnerIdentity: identity(runner.pid!),
+    });
+    const exited = new Promise((r) => runner.once("exit", r));
+    await tick(f.store, { ...f.config, snooze: undefined });
+    assert.equal(f.store.get(task.id).status, "expired");
+    await exited;
+  } finally {
+    runner.kill("SIGKILL");
     f.cleanup();
   }
 });
