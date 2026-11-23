@@ -47,6 +47,8 @@ export interface Task {
   error?: string;
   delivery: Delivery;
   snoozeJobId?: string;
+  /** Unix ms of the first terminal transition; absent on records written before it existed. */
+  finishedAt?: number;
 }
 export interface Usage {
   agent: Agent;

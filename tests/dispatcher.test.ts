@@ -7,12 +7,12 @@ import { fixture, eventually } from "./helpers.js";
 import {
   submit,
   runTask,
-  registerSnooze,
   reconcileDelivery,
   cancel,
   tick,
   acknowledge,
   finish,
+  ACK_GRACE_MS,
 } from "../src/dispatcher.js";
 import { identity } from "../src/process.js";
 import { workerCommand, parseOutcome } from "../src/adapters.js";
@@ -163,25 +163,18 @@ test("only an unchanged, unpinned review can retry a native tool denial once", a
     }
   }
 });
-test("Snooze registration is single-shot, watches terminal artifact, and distinguishes queue from acknowledgement", async () => {
+test("Codex wake waits for the acknowledgement grace and is suppressed after acknowledgement", async () => {
   const f = fixture();
   try {
     const origin = { client: "codex" as const, sessionId: randomUUID() };
     const task = submit(f.store, f.config, { ...f.input, origin });
-    await registerSnooze(f.store, f.config, task);
-    await registerSnooze(f.store, f.config, f.store.get(task.id));
-    const spec = JSON.parse(
-      readFileSync(join(f.root, "schedule.json"), "utf8"),
-    );
-    assert.equal(spec.thread_id, origin.sessionId);
-    assert.equal(spec.delay_seconds, 0);
-    assert.equal(spec.kind, "file");
-    assert.equal(existsSync(spec.path), false);
     f.store.update(task.id, { status: "running" });
     await runTask(f.store, f.config, task.id);
-    assert.equal(f.store.get(task.id).agent, "claude");
+    const path = join(f.state, "tasks", task.id, "result.json");
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).status, "completed");
     await reconcileDelivery(f.store, f.config);
-    assert.equal(f.store.get(task.id).delivery, "queued");
+    assert.equal(scheduled(f.root), 0);
+    assert.equal(f.store.get(task.id).delivery, "pending");
     assert.throws(
       () =>
         acknowledge(f.store, task.id, { ...origin, sessionId: randomUUID() }),
@@ -191,6 +184,91 @@ test("Snooze registration is single-shot, watches terminal artifact, and disting
       acknowledge(f.store, task.id, origin).delivery,
       "acknowledged",
     );
+    pastGrace(f, task.id);
+    await reconcileDelivery(f.store, f.config);
+    assert.equal(scheduled(f.root), 0);
+    assert.equal(f.store.get(task.id).delivery, "acknowledged");
+  } finally {
+    f.cleanup();
+  }
+});
+test("an unacknowledged terminal result gets exactly one wake after the grace", async () => {
+  const f = fixture();
+  try {
+    const origin = { client: "codex" as const, sessionId: randomUUID() };
+    const task = submit(f.store, f.config, { ...f.input, origin });
+    finish(f.store, task.id, { status: "failed" });
+    pastGrace(f, task.id);
+    await reconcileDelivery(f.store, f.config);
+    const spec = JSON.parse(
+      readFileSync(join(f.root, "schedule.json"), "utf8"),
+    );
+    assert.equal(spec.thread_id, origin.sessionId);
+    assert.equal(spec.delay_seconds, 0);
+    assert.equal(spec.kind, "file");
+    assert.equal(JSON.parse(readFileSync(spec.path, "utf8")).status, "failed");
+    assert.equal(f.store.get(task.id).snoozeJobId, "snooze-fixture");
+    await reconcileDelivery(f.store, f.config);
+    await reconcileDelivery(f.store, f.config);
+    assert.equal(f.store.get(task.id).delivery, "queued");
+    assert.equal(scheduled(f.root), 1);
+  } finally {
+    f.cleanup();
+  }
+});
+test("legacy job registered before the grace still reconciles without a second wake", async () => {
+  const f = fixture();
+  try {
+    const origin = { client: "codex" as const, sessionId: randomUUID() };
+    const task = submit(f.store, f.config, { ...f.input, origin });
+    f.store.update(task.id, { snoozeJobId: "snooze-fixture" });
+    f.store.update(task.id, { status: "completed" });
+    await reconcileDelivery(f.store, f.config);
+    assert.equal(f.store.get(task.id).delivery, "queued");
+    assert.equal(scheduled(f.root), 0);
+  } finally {
+    f.cleanup();
+  }
+});
+test("acknowledgement during async registration or reconciliation is never reopened", async () => {
+  const f = fixture();
+  try {
+    const slow = join(f.root, "slow-snooze");
+    const started = join(f.root, "started");
+    writeFileSync(
+      slow,
+      `#!/bin/sh\necho "$@" >> "${started}"\nsleep 1\nexec "${f.mock}" "$@"\n`,
+      { mode: 0o700 },
+    );
+    const config = { ...f.config, snooze: { command: slow, args: [] } };
+    const origin = { client: "codex" as const, sessionId: randomUUID() };
+    const a = submit(f.store, config, { ...f.input, origin });
+    finish(f.store, a.id, { status: "completed" });
+    pastGrace(f, a.id);
+    const registering = reconcileDelivery(f.store, config);
+    await eventually(() => f.store.get(a.id).delivery === "sending");
+    acknowledge(f.store, a.id, origin);
+    await registering;
+    assert.equal(f.store.get(a.id).delivery, "acknowledged");
+    assert.equal(f.store.get(a.id).snoozeJobId, "snooze-fixture");
+    assert.match(readFileSync(started, "utf8"), /^cancel snooze-fixture$/m);
+    await reconcileDelivery(f.store, config);
+    assert.equal(f.store.get(a.id).delivery, "acknowledged");
+    assert.equal(scheduled(f.root), 1);
+
+    const b = submit(f.store, config, {
+      ...f.input,
+      idempotencyKey: "legacy",
+      origin,
+    });
+    f.store.update(b.id, { snoozeJobId: "snooze-fixture" });
+    finish(f.store, b.id, { status: "completed" });
+    const reconciling = reconcileDelivery(f.store, config);
+    await eventually(() => readFileSync(started, "utf8").includes("events"));
+    acknowledge(f.store, b.id, origin);
+    await reconciling;
+    assert.equal(f.store.get(b.id).delivery, "acknowledged");
+    assert.equal(scheduled(f.root), 1);
   } finally {
     f.cleanup();
   }
@@ -321,6 +399,8 @@ test("pre-taskType idempotency records survive a configuration upgrade", () => {
   }
 });
 
+const pastGrace = (f: ReturnType<typeof fixture>, id: string) =>
+  f.store.update(id, { finishedAt: Date.now() - ACK_GRACE_MS - 1000 });
 const backdate = (f: ReturnType<typeof fixture>, id: string, seconds: number) =>
   f.store.update(id, { createdAt: Date.now() - seconds * 1000 });
 const scheduled = (root: string) =>
@@ -354,24 +434,27 @@ test("queued task expires behind a live runner with single, idempotent result an
     assert.equal(done.attempts, 0);
     assert.equal(done.runnerPid, undefined);
     assert.match(done.error!, /No work was attempted/);
-    assert.equal(done.snoozeJobId, "snooze-fixture");
+    assert.equal(done.snoozeJobId, undefined);
     assert.equal(f.store.get(live.id).status, "running");
-    const spec = JSON.parse(
-      readFileSync(join(f.root, "schedule.json"), "utf8"),
-    );
-    assert.equal(spec.path, join(f.state, "tasks", late.id, "result.json"));
-    assert.match(spec.title, /result ready/);
-    assert.match(spec.instruction, /not that the task succeeded/);
-    const result = readFileSync(spec.path, "utf8");
-    assert.equal(JSON.parse(result).status, "expired");
+    const path = join(f.state, "tasks", late.id, "result.json");
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).status, "expired");
     await tick(f.store, f.config);
     assert.equal(cancel(f.store, late.id).status, "expired");
     assert.equal(
       finish(f.store, late.id, { status: "completed" }).status,
       "expired",
     );
+    pastGrace(f, late.id);
+    await tick(f.store, f.config);
+    await tick(f.store, f.config);
     assert.equal(scheduled(f.root), 1);
-    assert.equal(JSON.parse(readFileSync(spec.path, "utf8")).status, "expired");
+    const spec = JSON.parse(
+      readFileSync(join(f.root, "schedule.json"), "utf8"),
+    );
+    assert.equal(spec.path, path);
+    assert.match(spec.title, /result ready/);
+    assert.match(spec.instruction, /not that the task succeeded/);
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).status, "expired");
     assert.equal(
       submit(f.store, f.config, {
         ...f.input,
@@ -409,38 +492,6 @@ test("tasks without deadlineSeconds keep unbounded queue wait and old idempotenc
     );
   } finally {
     f.cleanup();
-  }
-});
-test("cancel or expiry during async delivery registration prevents a late start", async () => {
-  for (const kind of ["cancel", "deadline"]) {
-    const f = fixture();
-    try {
-      const slow = join(f.root, "slow-snooze");
-      writeFileSync(slow, `#!/bin/sh\nsleep 1\nexec "${f.mock}" "$@"\n`, {
-        mode: 0o700,
-      });
-      const config = { ...f.config, snooze: { command: slow, args: [] } };
-      const task = submit(f.store, config, {
-        ...f.input,
-        origin: { client: "codex", sessionId: randomUUID() },
-        ...(kind === "deadline" ? { deadlineSeconds: 60 } : {}),
-      });
-      if (kind === "deadline")
-        f.store.update(task.id, { createdAt: Date.now() - 59500 });
-      const pending = tick(f.store, config);
-      if (kind === "cancel") {
-        await eventually(() => f.store.get(task.id).delivery === "sending");
-        cancel(f.store, task.id);
-      }
-      await pending;
-      const done = f.store.get(task.id);
-      assert.equal(done.status, kind === "cancel" ? "cancelled" : "expired");
-      assert.equal(done.runnerPid, undefined, kind);
-      assert.equal(done.snoozeJobId, "snooze-fixture", kind);
-      assert.equal(scheduled(f.root), 1, kind);
-    } finally {
-      f.cleanup();
-    }
   }
 });
 test("running attempt is clamped to the remaining deadline and keeps artifacts", async () => {

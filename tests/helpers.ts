@@ -37,6 +37,7 @@ if(args[0]==='app-server'){
 }else if(args[0]==='login'){console.error('Logged in using ChatGPT');
 }else if(args[0]==='auth'){console.log(JSON.stringify({loggedIn:mode!=='unauthenticated',authMethod:mode==='unauthenticated'?'none':'claude.ai'}));
 }else if(args[0]==='add'){fs.writeFileSync(${JSON.stringify(join(root, "schedule.json"))},args.at(-1));console.log(JSON.stringify({id:'snooze-fixture'}));
+}else if(args[0]==='cancel'){console.log(JSON.stringify({id:args[1],status:'cancelled'}));
 }else if(args[0]==='events'){console.log(JSON.stringify([{job_id:'snooze-fixture',delivery:'queued'}]));
 }else{
  process.stdin.resume();process.stdin.on('end',()=>{
