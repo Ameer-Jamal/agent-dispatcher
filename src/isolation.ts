@@ -50,10 +50,30 @@ export function configurationProfile(
               join(cwd, "opencode.jsonc"),
             ]
           : [];
-  const writable =
-    agent === "opencode"
-      ? `(deny file-write* (require-not (require-any ${[dirname(cwd), tmpdir(), "/private/tmp", "/dev", join(home, ".local/share/opencode"), join(home, ".local/state/opencode"), join(home, ".cache/opencode"), join(home, "Library/Caches/opencode")].map((p) => `(subpath ${JSON.stringify(resolvedPath(p))})`).join(" ")})))\n`
-      : "";
+  let writable = "";
+  if (agent === "opencode") {
+    const taskRoot = dirname(cwd);
+    const subpath = (p: string) =>
+      `(subpath ${JSON.stringify(resolvedPath(p))})`;
+    const taskWritePaths = [
+      cwd,
+      join(taskRoot, "development-cache"),
+      join(taskRoot, "opencode-config"),
+    ].map(subpath);
+    const runtimeWritePaths = [
+      tmpdir(),
+      "/private/tmp",
+      "/dev",
+      join(home, ".local/share/opencode"),
+      join(home, ".local/state/opencode"),
+      join(home, ".cache/opencode"),
+      join(home, "Library/Caches/opencode"),
+    ].map(subpath);
+    // Protect the coordinator's attempt logs and patch even when state is under a temp directory.
+    writable = `(deny file-write* (require-not (require-any ${[...taskWritePaths, ...runtimeWritePaths].join(" ")})))
+(deny file-write* (require-all ${subpath(taskRoot)} (require-not (require-any ${taskWritePaths.join(" ")}))))
+`;
+  }
   return `(version 1)\n(allow default)\n${writable}${agent === "cursor" ? `(deny file-write* (literal ${JSON.stringify(join(cwd, ".cursor/cli.json"))}))\n` : ""}${paths.map((p) => `(deny file-read-data (subpath ${JSON.stringify(p)}))`).join("\n")}\n`;
 }
 export function isolateCommand(

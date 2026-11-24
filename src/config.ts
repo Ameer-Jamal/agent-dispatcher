@@ -130,6 +130,17 @@ export function initialize(state = stateDir()) {
     );
   return path;
 }
+export const RequiredAccess = z.enum([
+  "connected_tools",
+  "external_credentials",
+  "interactive_approval",
+  "live_device",
+  "signed_in_cli",
+  "network_fetch",
+  "host_file",
+  "host_process",
+]);
+export type RequiredAccess = z.infer<typeof RequiredAccess>;
 export const originSchema = z.object({
   client: z.enum(["codex", "claude"]),
   sessionId: z.string().uuid(),
@@ -147,17 +158,38 @@ export const taskSchema = z
     model: z.string().min(1).max(200).optional(),
     capabilityReason: z.string().min(1).max(1000).optional(),
     requiredAccess: z
-      .array(
-        z.enum([
-          "connected_tools",
-          "external_credentials",
-          "interactive_approval",
-        ]),
-      )
-      .max(3)
+      .array(RequiredAccess)
+      .max(RequiredAccess.options.length)
       .optional()
       .describe(
-        "Access required to complete the worker task. Declare connected tools, external credentials or interactive approval when essential. These cannot run in a headless worker and are rejected before queueing. Leave them out of a separate local-only task.",
+        "Coordinator-only access required to complete the worker task: connected tools, external credentials, interactive approval, a live device (attached hardware, simulator, emulator or running local app) a signed-in CLI/service account, mandatory network fetches, host-only files, or host-only process/IPC checks. Headless workers cannot use these, so the dispatcher rejects them before queueing. Leave them out of a separate local-only task.",
+      ),
+    requiredFiles: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(500)
+          .refine((p) => !p.includes("\0"), "Path must not contain NUL"),
+      )
+      .max(50)
+      .optional()
+      .describe(
+        "Checkout-relative files or directories the worker cannot proceed without. Each must exist inside cwd, must use the real checkout path without symlinks, and must be tracked or non-ignored so it reaches the worker snapshot. Checked before queueing and again in the snapshot before the worker starts.",
+      ),
+    requiredCommands: z
+      .array(
+        z
+          .string()
+          .regex(
+            /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/,
+            "Command must be a bare executable basename",
+          ),
+      )
+      .max(20)
+      .optional()
+      .describe(
+        "Executable basenames (no paths or arguments) the worker needs. The dispatcher only looks them up on the host PATH and never runs them; availability there does not guarantee the worker's sandbox or native permissions will allow them.",
       ),
     deadlineSeconds: z
       .number()

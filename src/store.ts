@@ -26,6 +26,23 @@ export type Delivery =
   | "acknowledged"
   | "failed"
   | "unknown";
+export type PermissionScope =
+  "workspace" | "host" | "network" | "provider" | "unknown";
+/**
+ * Coordinator handoff for a genuine runtime permission block. Built only from closed enums and
+ * fixed text, so it never carries host paths, credentials or command bodies.
+ */
+export interface NeedsInput {
+  kind: "permission";
+  /** native_denial: the provider's permission system recorded a denied tool use. */
+  source: "native_denial" | "worker_report";
+  scopes: PermissionScope[];
+  action: "review_denied_operation" | "inspect_attempt";
+  instruction: string;
+  attempt: number;
+  /** File name inside the task's artifact directory. */
+  attemptArtifact: string;
+}
 export interface Task {
   id: string;
   input: TaskInput;
@@ -46,6 +63,7 @@ export interface Task {
   artifactDir?: string;
   summary?: string;
   error?: string;
+  needsInput?: NeedsInput;
   delivery: Delivery;
   snoozeJobId?: string;
   /** Unix ms of the first terminal transition; absent on records written before it existed. */
@@ -117,6 +135,9 @@ export class Store {
       this.db.exec("ROLLBACK");
       throw e;
     }
+  }
+  hasIdempotencyKey(key: string) {
+    return !!this.db.prepare("SELECT 1 FROM tasks WHERE idem=?").get(key);
   }
   get(id: string): Task {
     const row = this.db.prepare("SELECT data FROM tasks WHERE id=?").get(id) as

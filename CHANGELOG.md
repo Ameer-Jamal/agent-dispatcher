@@ -2,6 +2,9 @@
 
 ## 0.1.0-alpha.2 — Unreleased
 
+- Add optional `requiredFiles` and `requiredCommands` worker prerequisites, validated before queueing (no escaping or ignored inputs; host PATH lookup only, never executed) and re-checked against the snapshot before a worker starts. Add coordinator-only `live_device` and `signed_in_cli` access types.
+- Return a sanitized `needsInput` permission handoff on genuinely permission-blocked tasks while keeping the `blocked` status and all artifacts; nothing is approved or replayed.
+
 - Grant Antigravity native file reads and writes within each isolated worker checkout so headless reviews do not fail on `read_file`.
 - Persist definitive Codex sign-in rejections (expired/invalid refresh token, 401 unauthorized) separately from transient errors; local login status cannot clear them, a fresh successful remote check can. Worker auth failures invalidate readiness and return a sanitized login action.
 - Report provider readiness separately from dispatcher service liveness in `usage_status`, `status` and `doctor`.

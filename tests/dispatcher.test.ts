@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { fixture, eventually } from "./helpers.js";
@@ -12,8 +18,10 @@ import {
   tick,
   acknowledge,
   finish,
+  permissionHandoff,
   ACK_GRACE_MS,
 } from "../src/dispatcher.js";
+import { view } from "../src/mcp.js";
 import { identity } from "../src/process.js";
 import { workerCommand, parseOutcome } from "../src/adapters.js";
 import { subscriptionEnv } from "../src/process.js";
@@ -38,6 +46,221 @@ test("preflight rejects required access before queueing a worker", () => {
   } finally {
     f.cleanup();
   }
+});
+test("declared prerequisites queue when present and keep omitted inputs compatible", () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.repo, "fixture.json"), "{}\n");
+    const input = {
+      ...f.input,
+      requiredFiles: ["tracked.txt", "fixture.json"],
+      requiredCommands: ["git"],
+    };
+    const task = submit(f.store, f.config, input);
+    assert.equal(task.status, "queued");
+    assert.equal(submit(f.store, f.config, input).id, task.id);
+    const plain = submit(f.store, f.config, {
+      ...f.input,
+      idempotencyKey: "plain",
+    });
+    assert.equal("requiredFiles" in plain.input, false);
+    assert.equal("requiredCommands" in plain.input, false);
+    const empty = submit(f.store, f.config, {
+      ...f.input,
+      idempotencyKey: "empty",
+      requiredFiles: [],
+      requiredCommands: [],
+    });
+    assert.equal(empty.status, "queued");
+    assert.equal(existsSync(join(f.root, "calls.jsonl")), false);
+  } finally {
+    f.cleanup();
+  }
+});
+test("missing, ignored or escaping prerequisites and coordinator-only access are rejected before any task", () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.repo, ".gitignore"), "local.env\n");
+    f.git("add", ".gitignore");
+    f.git("commit", "-qm", "ignore");
+    writeFileSync(join(f.repo, "local.env"), "TOKEN=secret\n");
+    writeFileSync(join(f.root, "outside.txt"), "outside\n");
+    symlinkSync(join(f.root, "outside.txt"), join(f.repo, "escape.txt"));
+    symlinkSync(f.root, join(f.repo, "escape-dir"));
+    symlinkSync("tracked.txt", join(f.repo, "alias.txt"));
+    const cases: [Record<string, unknown>, RegExp][] = [
+      [{ requiredFiles: ["absent.txt"] }, /"absent.txt" does not exist/],
+      [{ requiredFiles: ["local.env"] }, /"local.env" is ignored by Git/],
+      [
+        { requiredFiles: ["escape.txt"] },
+        /outside the checkout through a symlink/,
+      ],
+      [
+        { requiredFiles: ["escape-dir/outside.txt"] },
+        /outside the checkout through a symlink/,
+      ],
+      [{ requiredFiles: ["../outside.txt"] }, /relative path inside cwd/],
+      [{ requiredFiles: [join(f.root, "outside.txt")] }, /relative path/],
+      [{ requiredFiles: [".git/config"] }, /outside \.git/],
+      [
+        { requiredFiles: ["alias.txt"] },
+        /declare the actual checkout-relative file/,
+      ],
+      [
+        { requiredCommands: ["agent-dispatcher-absent-tool"] },
+        /not found on the dispatcher host PATH/,
+      ],
+      [{ requiredCommands: ["/bin/sh"] }, /bare executable basename/],
+      [{ requiredCommands: ["sh -c id"] }, /bare executable basename/],
+      [{ requiredAccess: ["live_device"] }, /live target/],
+      [{ requiredAccess: ["signed_in_cli"] }, /signed-in CLI/],
+      [
+        { requiredAccess: ["network_fetch"] },
+        /Fetch the required dependencies/,
+      ],
+      [{ requiredAccess: ["host_file"] }, /Review the required host file/],
+      [
+        { requiredAccess: ["host_process"] },
+        /Run the host process or IPC check/,
+      ],
+    ];
+    for (const [extra, message] of cases) {
+      assert.throws(
+        () => submit(f.store, f.config, { ...f.input, ...extra }),
+        message,
+        JSON.stringify(extra),
+      );
+      assert.equal(f.store.all().length, 0);
+    }
+    assert.throws(
+      () =>
+        submit(
+          f.store,
+          { ...f.config, allowedRoots: [f.root] },
+          {
+            ...f.input,
+            cwd: f.root,
+          },
+        ),
+      /root of a Git checkout with an existing commit/,
+    );
+    // Validation happens in the dispatcher; no task, runner or worker was involved.
+    assert.equal(existsSync(join(f.root, "calls.jsonl")), false);
+    assert.equal(existsSync(join(f.state, "tasks")), false);
+  } finally {
+    f.cleanup();
+  }
+});
+test("a prerequisite that disappears after queueing stops the task before any worker starts", async () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.repo, "input.json"), "{}\n");
+    const input = { ...f.input, requiredFiles: ["input.json"] };
+    const task = submit(f.store, f.config, input);
+    rmSync(join(f.repo, "input.json"));
+    // An accepted idempotency key still returns its task after drift.
+    assert.equal(submit(f.store, f.config, input).id, task.id);
+    f.store.update(task.id, { status: "running" });
+    await runTask(f.store, f.config, task.id);
+    const done = f.store.get(task.id);
+    assert.equal(done.status, "failed");
+    assert.equal(done.attempts, 0);
+    assert.match(done.summary!, /no worker was started/);
+    assert.match(done.error!, /"input.json" does not exist/);
+    assert.equal(done.needsInput, undefined);
+    assert.equal(existsSync(join(done.artifactDir!, "attempt-1.json")), false);
+    assert.equal(
+      existsSync(join(f.state, "tasks", task.id, "result.json")),
+      true,
+    );
+  } finally {
+    f.cleanup();
+  }
+});
+test("native permission block returns a sanitized needsInput handoff and keeps artifacts", async () => {
+  const f = fixture("permission");
+  try {
+    const origin = { client: "codex" as const, sessionId: randomUUID() };
+    const task = submit(f.store, f.config, { ...f.input, origin });
+    f.store.update(task.id, { status: "running" });
+    await runTask(f.store, f.config, task.id);
+    const done = f.store.get(task.id);
+    assert.equal(done.status, "blocked");
+    assert.equal(done.permissionDenialsObserved, true);
+    assert.deepEqual(
+      { ...done.needsInput, instruction: undefined },
+      {
+        kind: "permission",
+        source: "native_denial",
+        scopes: ["workspace"],
+        action: "review_denied_operation",
+        instruction: undefined,
+        attempt: 1,
+        attemptArtifact: "attempt-1.json",
+      },
+    );
+    assert.match(done.needsInput!.instruction, /never approves or replays/);
+    assert.deepEqual(view(done).needsInput, done.needsInput);
+    assert.ok(existsSync(join(done.artifactDir!, "attempt-1.json")));
+    assert.ok(existsSync(join(done.artifactDir!, "changes.patch")));
+    const saved = JSON.parse(
+      readFileSync(join(f.state, "tasks", task.id, "result.json"), "utf8"),
+    );
+    assert.deepEqual(saved.needsInput, done.needsInput);
+    assert.ok(!JSON.stringify(done.needsInput).includes(f.root));
+    pastGrace(f, task.id);
+    await reconcileDelivery(f.store, f.config);
+    const wake = JSON.parse(
+      readFileSync(join(f.root, "schedule.json"), "utf8"),
+    );
+    assert.match(wake.instruction, /needsInput permission handoff/);
+    assert.match(wake.instruction, /only if a specific user action remains/);
+  } finally {
+    f.cleanup();
+  }
+});
+test("permission handoff classifies scope without carrying command bodies or paths", () => {
+  const secret = "curl -H 'Authorization: Bearer sk-secret' /Users/someone/x";
+  const outcome = parseOutcome("claude", {
+    code: 0,
+    stdout: JSON.stringify({
+      result: "Blocked.\nDISPATCHER_STATUS: blocked_permission",
+      permission_denials: [
+        { tool_name: "Bash", tool_input: { command: secret } },
+        {
+          tool_name: "WebFetch",
+          tool_input: { url: "https://x/?t=sk-secret" },
+        },
+      ],
+    }),
+    stderr: "",
+  });
+  assert.equal(outcome.kind, "permission");
+  assert.deepEqual(outcome.permissionScopes, ["host", "network"]);
+  const handoff = JSON.stringify(permissionHandoff(outcome, 2));
+  assert.ok(!/sk-secret|curl|\/Users|https:/.test(handoff), handoff);
+  assert.match(handoff, /"attemptArtifact":"attempt-2.json"/);
+  const reported = parseOutcome("claude", {
+    code: 0,
+    stdout: JSON.stringify({
+      result: "I couldn't run the check: sandbox denied it.",
+    }),
+    stderr: "",
+  });
+  assert.equal(reported.kind, "permission");
+  assert.deepEqual(permissionHandoff(reported, 1), {
+    kind: "permission",
+    source: "worker_report",
+    scopes: ["unknown"],
+    action: "inspect_attempt",
+    instruction: permissionHandoff(reported, 1).instruction,
+    attempt: 1,
+    attemptArtifact: "attempt-1.json",
+  });
+  assert.match(
+    permissionHandoff(reported, 1).instruction,
+    /ask the user only if a specific user action still remains/,
+  );
 });
 test("idempotency survives restart and rejects a different payload", () => {
   const f = fixture();
@@ -177,6 +400,12 @@ test("only an unchanged, unpinned review can retry a native tool denial once", a
       const done = f.store.get(task.id);
       assert.equal(done.attempts, attempts, mode);
       assert.equal(done.status, status, mode);
+      // A recovered denial keeps its success without a blocking handoff.
+      assert.equal(
+        done.needsInput?.attempt,
+        status === "blocked" ? attempts : undefined,
+        mode,
+      );
       const first = JSON.parse(
         readFileSync(join(done.artifactDir!, "attempt-1.json"), "utf8"),
       );

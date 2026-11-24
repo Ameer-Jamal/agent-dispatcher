@@ -17,6 +17,7 @@ import {
 import type { Config, Agent, TaskInput } from "./config.js";
 import { run, subscriptionEnv, type RunResult } from "./process.js";
 import { classifyAuthError } from "./usage.js";
+import type { PermissionScope } from "./store.js";
 export function workerCommand(
   agent: Agent,
   input: TaskInput,
@@ -193,6 +194,32 @@ export interface Outcome {
   // Sanitized category when the provider rejected sign-in; kind stays "availability".
   authFailure?: string;
   nativePermission?: boolean;
+  /** Coarse categories of natively denied tools; never tool input. */
+  permissionScopes?: PermissionScope[];
+}
+/** Classifies a denied tool by its leading name token only, so command bodies and paths are never read. */
+function deniedScope(record: unknown): PermissionScope {
+  const value =
+    typeof record === "string"
+      ? record
+      : typeof record === "object" && record
+        ? ["tool_name", "tool", "type", "action", "name"]
+            .map((key) => (record as Record<string, unknown>)[key])
+            .find((v) => typeof v === "string")
+        : undefined;
+  const name = /^[A-Za-z_]+/.exec(String(value ?? ""))?.[0] ?? "";
+  if (
+    /^(read|write|edit|multiedit|notebookedit|glob|grep|ls|list|patch|read_file|write_file)$/i.test(
+      name,
+    )
+  )
+    return "workspace";
+  if (/^(bash|shell|command|powershell|run_command|killshell)$/i.test(name))
+    return "host";
+  if (/^(webfetch|websearch|web_fetch|web_search|fetch)$/i.test(name))
+    return "network";
+  if (/^(mcp|mcp__\w*|plugin|skill|provider)$/i.test(name)) return "provider";
+  return "unknown";
 }
 export function parseOutcome(agent: Agent, result: RunResult): Outcome {
   const events: Record<string, unknown>[] = [];
@@ -208,6 +235,7 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
     tokens: number | undefined,
     permission = false,
     modelError = false;
+  const scopes = new Set<PermissionScope>();
   const errorText: string[] = [];
   for (const e of events) {
     const error = e.error as
@@ -240,14 +268,18 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
     if (agent === "claude" && typeof e.result === "string") summary = e.result;
     if (e.is_error === true || e.type === "error" || e.type === "turn.failed")
       modelError = true;
-    if (Array.isArray(e.permission_denials) && e.permission_denials.length)
+    if (Array.isArray(e.permission_denials) && e.permission_denials.length) {
       permission = true;
+      for (const d of e.permission_denials) scopes.add(deniedScope(d));
+    }
     if (
       agent === "antigravity" &&
       Array.isArray(e.denied_actions) &&
       e.denied_actions.length > 0
-    )
+    ) {
       permission = true;
+      for (const d of e.denied_actions) scopes.add(deniedScope(d));
+    }
     const item = e.item as { type?: string; text?: string } | undefined;
     if (item?.type === "agent_message") summary = item.text ?? summary;
     const u = e.usage as
@@ -270,8 +302,14 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
       /permission denied|blocked by configuration policy/i.test(
         state.error ?? "",
       )
-    )
+    ) {
       permission = true;
+      scopes.add(
+        /blocked by configuration policy/i.test(state.error ?? "")
+          ? "provider"
+          : deniedScope(e.part),
+      );
+    }
     if (part?.reason === "error" || part?.reason === "permission")
       modelError = true;
   }
@@ -333,7 +371,9 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
     tokens,
     kind,
     ...(authFailure ? { authFailure } : {}),
-    ...(permission && !result.stopReason ? { nativePermission: true } : {}),
+    ...(permission && !result.stopReason
+      ? { nativePermission: true, permissionScopes: [...scopes].sort() }
+      : {}),
   };
 }
 export async function execute(

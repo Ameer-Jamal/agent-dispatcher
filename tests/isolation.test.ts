@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   writeFileSync,
   existsSync,
   rmSync,
@@ -45,6 +46,18 @@ test(
       ]);
       assert.notEqual(denied.code, 0);
       assert.equal(existsSync(outside), false);
+      const attempt = join(root, "task/attempt-1.json");
+      writeFileSync(attempt, "{}");
+      const attemptWrite = await run("/usr/bin/sandbox-exec", [
+        "-p",
+        profile,
+        process.execPath,
+        "-e",
+        'require("node:fs").writeFileSync(process.argv[1],"test")',
+        attempt,
+      ]);
+      assert.notEqual(attemptWrite.code, 0);
+      assert.equal(readFileSync(attempt, "utf8"), "{}");
       const inside = join(cwd, "inside.txt");
       const allowed = await run("/usr/bin/sandbox-exec", [
         "-p",

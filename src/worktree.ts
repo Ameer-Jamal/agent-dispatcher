@@ -4,9 +4,13 @@ import {
   rmSync,
   writeFileSync,
   readFileSync,
+  statSync,
+  accessSync,
+  constants,
 } from "node:fs";
-import { join, relative, isAbsolute } from "node:path";
-import { run } from "./process.js";
+import { join, relative, isAbsolute, resolve, delimiter, sep } from "node:path";
+import { spawnSync } from "node:child_process";
+import { run, subscriptionEnv } from "./process.js";
 import { privateDir, type Config, type TaskInput } from "./config.js";
 async function git(
   cwd: string,
@@ -48,6 +52,136 @@ export function validateCwd(input: TaskInput, config: Config) {
       );
   }
   return cwd;
+}
+const inside = (root: string, path: string) => {
+  const rel = relative(root, path);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+};
+/** Host PATH lookup only: never executes the command, and says nothing about sandbox or native permissions. */
+function onHostPath(name: string, env: NodeJS.ProcessEnv) {
+  return (
+    (env.PATH ?? "")
+      .split(delimiter)
+      // Relative PATH entries would resolve against an arbitrary cwd.
+      .filter((dir) => isAbsolute(dir))
+      .some((dir) => {
+        try {
+          const file = join(dir, name);
+          if (!statSync(file).isFile()) return false;
+          accessSync(file, constants.X_OK);
+          return true;
+        } catch {
+          return false;
+        }
+      })
+  );
+}
+/**
+ * Problems with declared worker prerequisites, naming only the declared relative paths and basenames.
+ * `source` also checks that each file will reach the snapshot; a snapshot worktree simply lacks ignored files.
+ */
+export function prerequisiteProblems(
+  root: string,
+  input: Pick<TaskInput, "requiredFiles" | "requiredCommands">,
+  source: boolean,
+  env = subscriptionEnv(),
+) {
+  const problems: string[] = [];
+  const realRoot = realpathSync(root);
+  if (source) {
+    const repo = spawnSync("git", ["rev-parse", "--show-toplevel", "HEAD"], {
+      cwd: realRoot,
+      encoding: "utf8",
+      timeout: 3000,
+      killSignal: "SIGKILL",
+    });
+    if (repo.status !== 0 || repo.stdout.trimEnd().split("\n")[0] !== realRoot)
+      return ["Use the root of a Git checkout with an existing commit."];
+  }
+  const candidates = new Map<string, string>();
+  for (const file of input.requiredFiles ?? []) {
+    const name = JSON.stringify(file);
+    const target = resolve(realRoot, file);
+    if (
+      isAbsolute(file) ||
+      file.split(sep).includes("..") ||
+      !inside(realRoot, target) ||
+      relative(realRoot, target).split(sep)[0] === ".git"
+    ) {
+      problems.push(
+        "A required file must be a relative path inside cwd outside .git.",
+      );
+      continue;
+    }
+    let real: string;
+    try {
+      real = realpathSync(target);
+    } catch {
+      problems.push(`Required file ${name} does not exist in the checkout.`);
+      continue;
+    }
+    if (!inside(realRoot, real)) {
+      problems.push(
+        `Required file ${name} resolves outside the checkout through a symlink; copy the input into the repository instead.`,
+      );
+      continue;
+    }
+    if (target !== real) {
+      problems.push(
+        `Required file ${name} uses a symlink or noncanonical path; declare the actual checkout-relative file or directory.`,
+      );
+      continue;
+    }
+    if (source) candidates.set(relative(realRoot, target), name);
+  }
+  if (candidates.size) {
+    // One bounded, literal query for every path. It never runs a task-supplied executable.
+    const listed = spawnSync(
+      "git",
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.fsmonitor=false",
+        "--literal-pathspecs",
+        "ls-files",
+        "-z",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "--",
+        ...candidates.keys(),
+      ],
+      {
+        cwd: realRoot,
+        encoding: "utf8",
+        timeout: 3000,
+        killSignal: "SIGKILL",
+        maxBuffer: 20_000_000,
+      },
+    );
+    if (listed.status !== 0) {
+      problems.push(
+        "The dispatcher could not check the Git snapshot inputs. Verify the checkout and try again.",
+      );
+    } else {
+      const paths = listed.stdout.split("\0");
+      for (const [path, name] of candidates) {
+        if (
+          !paths.some((entry) => entry === path || entry.startsWith(path + sep))
+        )
+          problems.push(
+            `Required file ${name} is ignored by Git or otherwise absent from the worker snapshot. Supply the needed input as a checkout file or pass a reviewed excerpt.`,
+          );
+      }
+    }
+  }
+  for (const command of input.requiredCommands ?? [])
+    if (!onHostPath(command, env))
+      problems.push(
+        `Required command ${JSON.stringify(command)} was not found on the dispatcher host PATH; install it or run that step in the originating session.`,
+      );
+  return problems;
 }
 export async function snapshot(state: string, id: string, input: TaskInput) {
   const root = await git(input.cwd, ["rev-parse", "--show-toplevel"]);

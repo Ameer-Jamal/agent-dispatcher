@@ -33,6 +33,7 @@ export function view(task: Task) {
     delivery: task.delivery,
     workerSessionId: task.workerSessionId,
     permissionDenialsObserved: task.permissionDenialsObserved,
+    needsInput: task.needsInput,
     artifacts: task.artifactDir,
     patch: task.artifactDir ? `${task.artifactDir}/changes.patch` : undefined,
     createdAt: task.createdAt,
@@ -90,9 +91,9 @@ export async function serve(state: string, channel = false) {
     recover_tasks:
       "Recover active and unacknowledged work at startup, resume or compaction. Requires exact origin or cwd; makes no inference calls and does not acknowledge receipt.",
     dispatch_task:
-      "Persist a bounded task for subscription workers. Returns immediately; worker service must be running. Optional deadlineSeconds bounds queue wait plus all attempts; expiry ends the task as expired.",
+      "Persist a bounded task for subscription workers. Returns immediately; worker service must be running. Optional deadlineSeconds bounds queue wait plus all attempts; expiry ends the task as expired. Optional requiredFiles and requiredCommands are checked before queueing (commands by host PATH lookup only, never executed).",
     get_task:
-      "Read a terminal result and artifact paths. A terminal result is not success: check status (completed, failed, blocked, cancelled, interrupted or expired). acknowledge:true confirms receipt in the matching origin session.",
+      "Read a terminal result and artifact paths. A terminal result is not success: check status (completed, failed, blocked, cancelled, interrupted or expired). A blocked result may include needsInput, a sanitized permission handoff naming the attempt artifact to inspect; it never approves or replays anything. acknowledge:true confirms receipt in the matching origin session.",
     list_tasks: "List compact task summaries without model polling.",
     cancel_task: "Cancel queued/running work; retain partial artifacts.",
     usage_status:
@@ -223,8 +224,17 @@ export async function serve(state: string, channel = false) {
               await server.notification({
                 method: "notifications/claude/channel",
                 params: {
-                  content: `Dispatcher task ${task.id} finished with status ${task.status}. Call get_task with taskId and acknowledge:true. Review evidence and patch before applying; respond in this conversation.`,
-                  meta: { task_id: task.id, receiver: receiverId },
+                  content: `Dispatcher task ${task.id} finished with status ${task.status}. Call get_task with taskId and acknowledge:true. Review evidence and patch before applying; respond in this conversation.${task.needsInput ? ` It needs coordinator input (permission, action ${task.needsInput.action}): follow get_task needsInput and never approve or replay the denied operation automatically.` : ""}`,
+                  meta: {
+                    task_id: task.id,
+                    receiver: receiverId,
+                    ...(task.needsInput
+                      ? {
+                          needs_input: task.needsInput.kind,
+                          needs_input_action: task.needsInput.action,
+                        }
+                      : {}),
+                  },
                 },
               });
               store.update(task.id, { delivery: "delivered" });
