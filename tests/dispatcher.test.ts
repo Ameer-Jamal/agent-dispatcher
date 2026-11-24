@@ -124,6 +124,34 @@ test("exit-zero worker requires explicit completion evidence", () => {
   assert.equal(completed.kind, "success");
   assert.equal(completed.summary, "Reviewed permission handling.");
 });
+test("a recovered native tool denial does not discard completion evidence", () => {
+  const completed =
+    "Retried the read at the correct path.\nDISPATCHER_STATUS: completed";
+  const parse = (result: string, code = 0, is_error = false) =>
+    parseOutcome("claude", {
+      code,
+      stdout: JSON.stringify({
+        result,
+        is_error,
+        permission_denials: [{ tool_name: "Read" }],
+      }),
+      stderr: "",
+    });
+  assert.equal(parse(completed).kind, "success");
+  assert.equal(parse(completed).nativePermission, true);
+  assert.equal(parse(completed, 1).kind, "permission");
+  assert.equal(parse(completed, 0, true).kind, "permission");
+  assert.equal(
+    parse("Required check unfinished.\nDISPATCHER_STATUS: incomplete").kind,
+    "permission",
+  );
+  assert.equal(
+    parse(
+      "I couldn't finish the check: permission denied.\nDISPATCHER_STATUS: completed",
+    ).kind,
+    "permission",
+  );
+});
 test("only an unchanged, unpinned review can retry a native tool denial once", async () => {
   for (const { mode, prefer, attempts, status } of [
     { mode: "review-permission", attempts: 2, status: "completed" },

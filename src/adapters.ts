@@ -280,11 +280,22 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
     "\n" +
     (modelError || result.code !== 0 ? result.stdout : "")
   ).toLowerCase();
+  const lines = summary.trimEnd().split("\n");
+  const status = workerStatus.exec(lines.at(-1)?.trim() ?? "")?.[1];
+  if (status) summary = lines.slice(0, -1).join("\n").trimEnd();
+  const saysBlocked = reportedPermissionBlock.test(summary.trimStart());
+  const confirmedCompletion =
+    status === "completed" && !!summary.trim() && !saysBlocked;
   let kind: Outcome["kind"] = "success";
   let authFailure: string | undefined;
   if (result.stopReason)
     kind = result.stopReason === "cancelled" ? "permission" : "failure";
-  else if (permission) kind = "permission";
+  // Native denial lists describe attempted operations, including ones the worker recovered from.
+  else if (
+    permission &&
+    (result.code !== 0 || modelError || !confirmedCompletion)
+  )
+    kind = "permission";
   else if (result.code !== 0 || modelError) {
     // Only provider errors count: task output may legitimately mention 401s.
     authFailure = classifyAuthError(
@@ -304,16 +315,10 @@ export function parseOutcome(agent: Agent, result: RunResult): Outcome {
       kind = "permission";
     else kind = "failure";
   }
-  const lines = summary.trimEnd().split("\n");
-  const status = workerStatus.exec(lines.at(-1)?.trim() ?? "")?.[1];
-  if (status) summary = lines.slice(0, -1).join("\n").trimEnd();
   if (kind === "success") {
-    if (
-      status === "blocked_permission" ||
-      (!status && reportedPermissionBlock.test(summary.trimStart()))
-    )
+    if (status === "blocked_permission" || (!status && saysBlocked))
       kind = "permission";
-    else if (status !== "completed" || !summary.trim()) {
+    else if (!confirmedCompletion) {
       kind = "failure";
       if (!status && summary)
         summary = `Worker did not confirm completion.\n\n${summary}`;

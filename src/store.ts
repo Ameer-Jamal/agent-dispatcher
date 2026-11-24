@@ -38,6 +38,7 @@ export interface Task {
   runnerPid?: number;
   runnerIdentity?: string;
   workerSessionId?: string;
+  permissionDenialsObserved?: boolean;
   workerPid?: number;
   workerIdentity?: string;
   worktree?: string;

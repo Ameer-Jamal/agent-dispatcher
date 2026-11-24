@@ -32,6 +32,7 @@ export function view(task: Task) {
     error: task.error,
     delivery: task.delivery,
     workerSessionId: task.workerSessionId,
+    permissionDenialsObserved: task.permissionDenialsObserved,
     artifacts: task.artifactDir,
     patch: task.artifactDir ? `${task.artifactDir}/changes.patch` : undefined,
     createdAt: task.createdAt,

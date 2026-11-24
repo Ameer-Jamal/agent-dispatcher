@@ -302,7 +302,12 @@ export async function runTask(store: Store, config: Config, id: string) {
         JSON.stringify({ agent: selection.agent, ...result, outcome }, null, 2),
         { mode: 0o600 },
       );
-      store.update(id, { workerSessionId: outcome.sessionId });
+      store.update(id, {
+        workerSessionId: outcome.sessionId,
+        ...(outcome.nativePermission
+          ? { permissionDenialsObserved: true }
+          : {}),
+      });
       // Invalidate before any later refresh or rerouting can reuse cached readiness.
       if (outcome.authFailure)
         recordWorkerAuthFailure(
